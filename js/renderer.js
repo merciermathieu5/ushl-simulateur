@@ -1,7 +1,6 @@
 "use strict";
 
 /* ---------- Rendu de la patinoire (canvas) ---------- */
-const BENCH={away:{x:24,y:-50},home:{x:-24,y:-50}};
 const PBX={away:{x:20,y:50},home:{x:-20,y:50}};
 const WORLD={w:210,h:112};
 

@@ -87,8 +87,8 @@ function initUI(){
       if(playing&&now>=freezeUntil){
         let ng=g+dtR*speed;
         const crossed=G.stops.filter(s=>s.t>g&&s.t<=ng);
-        const hard=crossed.find(s=>s.type!=="pen");
-        crossed.filter(s=>s.type==="pen"&&(!hard||s.t<=hard.t)).forEach(s=>showToast(s.p));
+        const hard=crossed.find(s=>!SOFT.has(s.type));
+        crossed.filter(s=>SOFT.has(s.type)&&(!hard||s.t<=hard.t)).forEach(s=>showToast(s));
         if(hard){ng=hard.t;triggerStop(hard,now)}
         if(ng>=G.T){ng=G.T;playing=false;updatePlayIcon();showFinal()}
         dtG=ng-g; g=ng;
@@ -116,7 +116,14 @@ function initUI(){
       showBanner(`<div class="big">Fin de la ${perName(s.per,G.nPer)}</div><div class="small">${esc2(G.team.away.abbr)} ${sc.away}, ${esc2(G.team.home.abbr)} ${sc.home}</div>`);
     }
   }
-  function showToast(p){const el=$("toast");el.textContent="Pénalité : "+(p.p?p.p.name:"")+" ("+G.team[p.side].abbr+"), "+p.inf.toLowerCase()+", "+p.label;el.hidden=false;toastUntil=performance.now()+2600}
+  // Événements qui n'arrêtent pas la lecture : un bandeau en bas de la patinoire
+  const SOFT=new Set(["pen","pull","goalie"]);
+  function softText(s){
+    if(s.type==="pen"){const p=s.p;return "Pénalité : "+(p.p?p.p.name:"")+" ("+G.team[p.side].abbr+"), "+p.inf.toLowerCase()+", "+p.label}
+    if(s.type==="pull") return "Filet désert : "+G.team[s.side].abbr+" retire son gardien";
+    return "Changement de gardien "+G.team[s.side].abbr+" : "+s.in.name+" remplace "+s.out.name;
+  }
+  function showToast(s){const el=$("toast");el.textContent=softText(s);el.hidden=false;toastUntil=performance.now()+2600}
   function showBanner(html){const b=$("banner");b.innerHTML=html;b.hidden=false}
   function hideBanner(){$("banner").hidden=true}
   function showFinal(){
@@ -187,13 +194,15 @@ function initUI(){
       const act=G.pens.filter(p=>p.side===pkS&&p.strength&&p.t<=g&&g<p.end).sort((a,b)=>a.end-b.end);
       strTxt="Avantage numérique "+G.team[pp].abbr+(act.length?" "+fmtClock(act[0].end-g):"")+(st[pp].n-st[pkS].n>1?" (5 c. 3)":"");
     } else if(st.away.n<5) strTxt=st.away.n+" contre "+st.home.n;
-    $("strength").textContent=strTxt;
+    const pulled=SIDES.filter(s=>st[s].pulled).map(s=>"Filet désert "+G.team[s].abbr);
+    $("strength").textContent=[...pulled,strTxt].filter(Boolean).join(", ");
     // présences
     const seg=G.segAt(g);
     SIDES.forEach(s=>{
       const el=$(s==="away"?"oiAway":"oiHome"); const tm=G.team[s];
       const k=seg.state[s].kind; const lab=k==="PP"?"Avantage numérique":k==="PK"?"Désavantage numérique":(seg.state[s].n<5?seg.state[s].n+" contre "+seg.state[s].n:"Forces égales");
-      const rows=seg.line[s].map(e=>`<li><span class="role">${ROLE_FR[e.role]}</span><span>${esc2(e.p.name)}</span></li>`).join("")+`<li><span class="role">G</span><span>${esc2(G.goalie[s].name)}</span></li>`;
+      const gk=G.goalieAt(s,g), out=G.pulledAt(s,g);
+      const rows=seg.line[s].map(e=>`<li><span class="role">${ROLE_FR[e.role]}</span><span>${esc2(e.p.name)}${e.role==="X"?" (6e attaquant)":""}</span></li>`).join("")+`<li><span class="role">G</span><span>${out?"Filet désert ("+esc2(gk.name)+" au banc)":esc2(gk.name)}</span></li>`;
       const bx=[...G.boxedAt(s,g)].map(p=>esc2(p.name)).join(", ");
       el.innerHTML=`<h4><span class="dot" style="background:${dotColor(G,s)}"></span>${esc2(tm.name)}</h4><div class="st">${lab}</div><ul>${rows}</ul>${bx?`<div class="box">Au banc des pénalités : ${bx}</div>`:""}`;
     });
@@ -204,10 +213,12 @@ function initUI(){
       lastFeedCount=evs.length; const f=$("feed");
       if(!evs.length){f.innerHTML='<li class="empty">Mise au jeu initiale. Appuyez sur lecture.</li>';return}
       f.innerHTML=evs.slice().reverse().map(e=>{
-        const when=e.type==="final"?"":(perShort(e.type==="end"?e.per:(e.g||e.p).per,G.nPer)+" "+(e.type==="end"?"":fmt((e.g||e.p).sec)));
+        const src=e.g||e.p||e;
+        const when=e.type==="final"?"":(perShort(src.per,G.nPer)+" "+(e.type==="end"?"":fmt(src.sec)));
         let body="";
         if(e.type==="goal"){const x=e.g;body=`<span class="goal"><span class="tag" style="background:${dotColor(G,x.side)}"></span>But ${esc2(G.team[x.side].abbr)} : ${esc2(x.scorer?x.scorer.name:"")}</span>${x.assists.length?" ("+x.assists.map(p=>esc2(p.name)).join(", ")+")":" (sans aide)"}${x.ppGoal?", AN":""}`}
         else if(e.type==="pen"){const p=e.p;body=`Pénalité ${esc2(G.team[p.side].abbr)} : ${esc2(p.p?p.p.name:"")}, ${esc2(p.inf.toLowerCase())}, ${esc2(p.label)}`}
+        else if(e.type==="pull"||e.type==="goalie"){body=esc2(softText(e))}
         else if(e.type==="end"){body=`Fin de la ${perName(e.per,G.nPer)}`}
         else {const s2=scoreAt(G.T+1);body=`<span class="goal">Final${G.T>3600?" ("+finalOT()+")":""} : ${esc2(G.team.away.abbr)} ${s2.away}, ${esc2(G.team.home.abbr)} ${s2.home}${s2.away===s2.home?", match nul":""}</span>`}
         return `<li data-t="${e.t}"><span class="ft">${when}</span><span>${body}</span></li>`;

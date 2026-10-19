@@ -69,3 +69,47 @@ test("séries : prolongations multiples jusqu'au but",()=>{
   assert.strictEqual(G.attackDir("home",4000),-G.attackDir("home",5000));
   assert.strictEqual(api.perName(5,5),"2e prolongation"); assert.strictEqual(api.perName(4,4),"Prolongation");
 });
+
+test("gardien retiré en fin de match et but dans un filet désert",()=>{
+  const G=build(fixture("empty-net.txt"));
+  // NJ perd 3-2 après le but de 12:00 en 3e : le gardien sort avant le but EN de 19:12
+  const en=G.goals.find(g=>/EN/.test(g.tag));
+  assert.strictEqual(en.side,"home");
+  const p=G.pulls.find(x=>x.side==="away");
+  assert.ok(p&&p.a<en.t&&en.t<p.b,"retrait couvrant le but EN");
+  assert.ok(p.a>2400+720,"retiré après le but de 12:00");
+  const t=(p.a+en.t)/2;
+  assert.ok(G.stateAt(t).away.pulled);
+  const on=G.segAt(t).line.away;
+  assert.strictEqual(on.length,6); assert.ok(on.some(e=>e.role==="X"));
+  // le gardien est au banc, aucun tir au but contre le filet désert sauf le but
+  const gk=api.targetsAt(G,t).list.find(o=>o.side==="away"&&o.role==="G");
+  assert.ok(gk.y<-45);
+  assert.ok(!G.shots.some(s=>s.side==="home"&&s.t>p.a&&s.t<p.b&&!s.goal));
+  // le gardien revient après le but
+  assert.ok(!G.pulledAt("away",en.t+1));
+  // l'équipe qui mène ne retire jamais son gardien
+  assert.ok(!G.pulls.some(x=>x.side==="home"));
+});
+
+test("pas de gardien retiré quand le match est égal",()=>{
+  for(const f of ["base.txt","tie.txt","double-ot.txt"]) assert.strictEqual(build(fixture(f)).pulls.length,0,f);
+});
+
+test("changement de gardien après le dernier but accordé par le partant",()=>{
+  const G=build(fixture("empty-net.txt"));
+  // Markstrom accorde 3 buts : remplacé après le 3e but de TOR (9:30 en 2e)
+  assert.strictEqual(G.goalies.away.length,2);
+  assert.strictEqual(G.goalieAt("away",100).name,"Jacob Markstrom");
+  assert.strictEqual(G.goalieSwap.away,1200+570+0.05);
+  assert.strictEqual(G.goalieAt("away",2000).name,"Jake Allen");
+  assert.ok(G.events.some(e=>e.type==="goalie"&&e.side==="away"));
+  assert.strictEqual(G.goalies.home.length,1);
+});
+
+test("changement de gardien à l'entracte quand le partant n'a rien accordé",()=>{
+  const raw=fixture("empty-net.txt").replace("Jacob Markstrom (NJ ), 12 saves out of 15 shots","Jacob Markstrom (NJ ), 12 saves out of 12 shots")
+    .replace("Jake Allen (NJ ), 20 saves out of 20 shots","Jake Allen (NJ ), 20 saves out of 23 shots");
+  const G=build(raw);
+  assert.strictEqual(G.goalieSwap.away,1200.01);
+});
