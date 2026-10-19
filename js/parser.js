@@ -81,7 +81,9 @@ function parseSummary(raw){
     if(up===S.away||up===S.home){cur=up===S.away?"away":"home";continue}
     if(sec==="score"){
       const pm=t.match(/^Period\s+(\d+)/i); if(pm){per=+pm[1];continue}
-      if(/^(Overtime|OT\b|Prolongation)/i.test(t)){per=4;continue}
+      // « Overtime », « Overtime 2 », « 2nd Overtime », « Double Overtime »... ou un nouvel en-tête « Overtime »
+      const om=t.match(/^(?:(\d+)\s*(?:st|nd|rd|th|re|e)?\s+|(double|triple|quadruple)\s+)?(?:Overtime|OT\b|Prolongation)\s*#?(\d+)?/i);
+      if(om){const n=om[1]||om[3]||(om[2]&&{double:2,triple:3,quadruple:4}[om[2].toLowerCase()]);per=n?3+(+n):Math.max(4,per+1);continue}
       if(/PENALT/i.test(t)){parsePens(t,per,S);continue}
       const gm=t.match(/^\d+\.\s*([^,]+?)\s*,\s*(.+)$/); if(gm) parseGoal(gm,per,S);
       continue;

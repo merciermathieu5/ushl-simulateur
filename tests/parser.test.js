@@ -48,3 +48,11 @@ test("date « As of » de la page des trios",()=>{
   assert.strictEqual(new Date(api.linesDate("As of mardi, juil 7 2026")).getMonth(),6);
   assert.strictEqual(api.linesDate("pas de date"),null);
 });
+
+test("en-têtes de prolongation",()=>{
+  const base=fixture("double-ot.txt");
+  for(const h of ["Overtime 2","2nd Overtime","Double Overtime","Overtime"]){
+    const S=api.parseSummary(base.replace(" Overtime 2\n"," "+h+"\n"));
+    assert.strictEqual(S.goals[2].per,5,h);
+  }
+});

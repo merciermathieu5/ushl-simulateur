@@ -63,10 +63,13 @@ function buildGame(S,L,seedText){
   });
 
   // Durée du match
+  // Saison : une prolongation, le match nul est possible. Séries : prolongations jusqu'au but.
   const otGoal=G.goals.find(g=>g.per>=4);
-  const hasOT=!!otGoal||G.pens.some(p=>p.per>=4)||SIDES.some(s=>(S.shotRows[s][0]||[]).length>=5&&S.shotRows[s][0][3]>0);
+  const otShots=SIDES.some(s=>(S.shotRows[s][0]||[]).length>=5&&S.shotRows[s][0][3]>0);
+  G.nPer=otGoal?otGoal.per:Math.max(3,otShots?4:3,...G.pens.map(p=>p.per));
+  const hasOT=G.nPer>3;
   G.hasOT=hasOT;
-  G.T=otGoal?3600+otGoal.sec:(hasOT?4800:3600);
+  G.T=otGoal?otGoal.t:G.nPer*1200;
   G.goals=G.goals.filter(g=>g.t<=G.T);
 
   // Fin des pénalités (but en avantage numérique)
@@ -155,12 +158,12 @@ function buildGame(S,L,seedText){
     }).filter(e=>e.p);
   }
   const pickNext=(last,n,w,excl)=>{if(n<=1)return 0;const ws=w.slice(0,n).map((x,i)=>excl&&i===last?0:x);const tot=ws.reduce((a,b)=>a+b,0);let r=R()*tot;for(let i=0;i<n;i++){r-=ws[i];if(r<=0)return i}return n-1};
-  const B=new Set([0,G.T]); [1200,2400,3600].forEach(x=>{if(x<G.T)B.add(x)});
+  const B=new Set([0,G.T]); for(let x=1200;x<G.T;x+=1200) B.add(x);
   G.pens.forEach(p=>{if(p.t<G.T)B.add(p.t);if(p.end<G.T)B.add(p.end);if(p.boxEnd<G.T)B.add(p.boxEnd)});
   G.goals.forEach(g=>{if(g.t+0.05<G.T)B.add(g.t+0.05)});
   const bs=[...B].sort((a,b)=>a-b);
   const ctx={away:{f:0,d:0,pp:0,pk:0,ppStart:0,last:null},home:{f:0,d:0,pp:0,pk:0,ppStart:0,last:null}};
-  const perStarts=new Set([0,1200,2400,3600]);
+  const perStarts=new Set([...Array(G.nPer)].map((_,i)=>i*1200));
   for(let i=0;i<bs.length-1;i++){
     const a=bs[i],b=bs[i+1]; if(b-a<0.001) continue;
     const st=stateAt(a+0.0005); let cur=a;
@@ -194,21 +197,30 @@ function buildGame(S,L,seedText){
     if(idx<0) return;
     Ln[idx]={p,role:Ln[idx].role}; F.add(p);
   }
-  const perStart=t=>t>=3600?3600:Math.floor(t/1200)*1200;
+  const perStart=t=>Math.min(Math.floor(t/1200),G.nPer-1)*1200;
   G.goals.forEach(g=>{const tt=Math.max(perStart(g.t-0.001),g.t-0.3);[g.scorer,...g.assists].forEach(p=>ensureOnIce(g.side,p,tt))});
   G.pens.forEach(p=>{const tt=Math.max(perStart(p.t-0.001),p.t-0.3);const box=G.boxedAt(p.side,tt);if(!box.has(p.p))ensureOnIce(p.side,p.p,tt)});
 
   // Tirs
-  const periods=hasOT?[1,2,3,4]:[1,2,3];
+  const periods=[...Array(G.nPer)].map((_,i)=>i+1);
+  const perEnd=per=>Math.min(per*1200,G.T);
+  // Tirs de prolongation : une colonne par prolongation, sinon le total « OT » réparti selon la durée.
+  const otDur=per=>perEnd(per)-(per-1)*1200, otAll=periods.filter(p=>p>3).reduce((a,p)=>a+otDur(p),0);
+  const otCum=per=>periods.filter(p=>p>3&&p<=per).reduce((a,p)=>a+otDur(p),0);
+  const otShare=(total,per)=>Math.round(total*otCum(per)/otAll)-Math.round(total*(otCum(per)-otDur(per))/otAll);
   const anchors=[...G.goals.map(g=>g.t),...G.pens.map(p=>p.t)];
   G.goals.forEach(g=>G.shots.push({t:g.t,side:g.side,p:g.scorer,goal:g}));
   const fallbackTotal=s=>G.roster[s].reduce((a,p)=>a+p.s,0);
   periods.forEach(per=>{
-    const a=(per-1)*1200, b=per===4?G.T:per*1200;
+    const a=(per-1)*1200, b=perEnd(per);
     SIDES.forEach(side=>{
       const row=S.shotRows[side][0];
-      let total=row&&row.length>=4?(row[per-1]||0):(per<=3?Math.round(fallbackTotal(side)/3):0);
-      if(row&&row.length===4&&per===4) total=0;
+      let total;
+      if(!row||row.length<4) total=per<=3?Math.round(fallbackTotal(side)/3):0;
+      else if(per<=3) total=row[per-1]||0;
+      else if(row.length===4) total=0;
+      else if(G.nPer>4&&row.length===G.nPer+1) total=row[per-1]||0;
+      else total=otShare(row[3]||0,per);
       const gc=G.goals.filter(g=>g.side===side&&g.per===per).length;
       const n=Math.max(0,total-gc);
       for(let i=0;i<n;i++){
@@ -243,7 +255,7 @@ function buildGame(S,L,seedText){
   });
 
   // Trajectoire de la rondelle
-  G.attackDir=(side,t)=>{const per=t<1200?1:t<2400?2:t<3600?3:4;const hd=(per===2||per===4)?-1:1;return side==="home"?hd:-hd};
+  G.attackDir=(side,t)=>{const per=Math.min(Math.floor(t/1200)+1,G.nPer);const hd=per%2===0?-1:1;return side==="home"?hd:-hd};
   const roleOf=(side,p,t)=>{const e=segAt(t).line[side].find(x=>x.p===p);return e?e.role:"C"};
   const kfs=G.kfs;
   const clampR=(x,y)=>{x=clamp(x,-96,96);y=clamp(y,-39.5,39.5);const ax=Math.abs(x),ay=Math.abs(y);if(ax>72&&ay>14.5){const cx=Math.sign(x)*72,cy=Math.sign(y)*14.5;const dx=x-cx,dy=y-cy;const d=Math.hypot(dx,dy);if(d>25){x=cx+dx/d*25;y=cy+dy/d*25}}return {x,y}};
@@ -261,7 +273,7 @@ function buildGame(S,L,seedText){
   };
   const face=(t0,x,y,hold)=>{push(t0,x,y,null,"face");push(t0+hold,x,y,null,"face");st={x,y,side:null}};
   periods.forEach(per=>{
-    const a=(per-1)*1200, b=per===4?G.T:per*1200;
+    const a=(per-1)*1200, b=perEnd(per);
     face(a,0,0,1.5); let cursor=a+1.5;
     const an=[...G.shots.filter(s=>s.t>a&&s.t<=b).map(s=>({type:"shot",t:s.t,s})),
               ...G.pens.filter(p=>p.t>=a&&p.t<b).map(p=>({type:"pen",t:p.t,p}))].sort((x,y)=>x.t-y.t);
@@ -292,14 +304,14 @@ function buildGame(S,L,seedText){
       }
     });
     if(cursor<b-0.8) fill(cursor,b);
-    if(!(otGoal&&per===4)) push(b,st.x,st.y,null,"end");
+    if(!(otGoal&&per===G.nPer)) push(b,st.x,st.y,null,"end");
   });
   kfs.sort((a,b)=>a.t-b.t);
 
   // Événements et arrêts
   G.goals.forEach(g=>{G.events.push({t:g.t,type:"goal",g});G.stops.push({t:g.t,type:"goal",g})});
   G.pens.forEach(p=>{G.events.push({t:p.t,type:"pen",p});G.stops.push({t:p.t,type:"pen",p})});
-  [1200,2400,3600].forEach((x,i)=>{if(x<G.T){G.events.push({t:x,type:"end",per:i+1});G.stops.push({t:x,type:"end",per:i+1})}});
+  for(let k=1;k*1200<G.T;k++){G.events.push({t:k*1200,type:"end",per:k});G.stops.push({t:k*1200,type:"end",per:k})}
   G.events.push({t:G.T,type:"final"});
   G.events.sort((a,b)=>a.t-b.t||(a.type==="end"?1:-1)); G.stops.sort((a,b)=>a.t-b.t);
   return G;

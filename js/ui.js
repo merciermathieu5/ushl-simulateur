@@ -50,7 +50,7 @@ function initUI(){
     const sc=$("scrub"); sc.max=Math.ceil(G.T); sc.value=0;
     const mk=$("marks"); mk.innerHTML="";
     const addMk=(t,cls,color,title)=>{const d=document.createElement("span");d.className="mk "+cls;d.style.left=(t/G.T*100)+"%";if(color)d.style.background=color;if(title)d.title=title;mk.appendChild(d)};
-    [1200,2400,3600].forEach(x=>{if(x<G.T)addMk(x,"per")});
+    for(let x=1200;x<G.T;x+=1200) addMk(x,"per");
     G.pens.forEach(p=>addMk(p.t,"pen"));
     G.goals.forEach(gg=>addMk(gg.t,"goal",dotColor(G,gg.side)));
     const d=SIDES.map(s=>{const q=G.diag[s];const nm=G.team[s].name;
@@ -108,11 +108,11 @@ function initUI(){
       const gg=s.g; const tm=G.team[gg.side];
       const ast=gg.assists.length?"Aides : "+gg.assists.map(p=>p.name).join(", "):"Sans aide";
       const tags=[]; if(gg.ppGoal||/PP/.test(gg.tag))tags.push("en avantage numérique"); if(/SH/.test(gg.tag))tags.push("en désavantage numérique"); if(/EN/.test(gg.tag))tags.push("dans un filet désert");
-      showBanner(`<div class="big goal">But ${esc2(tm.abbr)} !</div><div class="mid">${esc2(gg.scorer?gg.scorer.name:"")}</div><div class="small">${esc2(ast)}</div><div class="small">${PER_SHORT[gg.per-1]} ${gg.per===4?"":"période "}à ${fmt(gg.sec)}${tags.length?", "+tags.join(", "):""}</div>`);
+      showBanner(`<div class="big goal">But ${esc2(tm.abbr)} !</div><div class="mid">${esc2(gg.scorer?gg.scorer.name:"")}</div><div class="small">${esc2(ast)}</div><div class="small">${perShort(gg.per,G.nPer)} ${gg.per>=4?"":"période "}à ${fmt(gg.sec)}${tags.length?", "+tags.join(", "):""}</div>`);
     } else if(s.type==="end"){
       freezeUntil=now+1700; bannerUntil=now+1700;
       const sc=scoreAt(s.t+0.001);
-      showBanner(`<div class="big">Fin de la ${PER_NAMES[s.per-1]}</div><div class="small">${esc2(G.team.away.abbr)} ${sc.away}, ${esc2(G.team.home.abbr)} ${sc.home}</div>`);
+      showBanner(`<div class="big">Fin de la ${perName(s.per,G.nPer)}</div><div class="small">${esc2(G.team.away.abbr)} ${sc.away}, ${esc2(G.team.home.abbr)} ${sc.home}</div>`);
     }
   }
   function showToast(p){const el=$("toast");el.textContent="Pénalité : "+(p.p?p.p.name:"")+" ("+G.team[p.side].abbr+"), "+p.inf.toLowerCase()+", "+p.label;el.hidden=false;toastUntil=performance.now()+2600}
@@ -121,9 +121,10 @@ function initUI(){
   function showFinal(){
     const sc=scoreAt(G.T+1); const ot=G.T>3600;
     const stars=G.S.stars.slice(0,3).map(s=>`<li>${"★".repeat(4-s.n)} ${esc2(s.name)} (${esc2(s.abbr)})</li>`).join("");
-    showBanner(`<div class="big">Final${ot?" (prol.)":""}</div><div class="mid">${esc2(G.team.away.name)} ${sc.away}, ${esc2(G.team.home.name)} ${sc.home}</div>${stars?`<ul class="stars">${stars}</ul>`:""}${G.S.attendance?`<div class="small">Assistance : ${esc2(G.S.attendance)}</div>`:""}`);
+    showBanner(`<div class="big">Final${ot?" ("+finalOT()+")":""}</div><div class="mid">${esc2(G.team.away.name)} ${sc.away}, ${esc2(G.team.home.name)} ${sc.home}</div>${sc.away===sc.home?`<div class="small">Match nul</div>`:""}${stars?`<ul class="stars">${stars}</ul>`:""}${G.S.attendance?`<div class="small">Assistance : ${esc2(G.S.attendance)}</div>`:""}`);
     bannerSticky=true;
   }
+  function finalOT(){return G.nPer>4?perShort(G.nPer,G.nPer):"prol."}
   function esc2(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
   function scoreAt(t){const o={away:0,home:0};G.goals.forEach(x=>{if(x.t<=t)o[x.side]++});return o}
 
@@ -146,11 +147,12 @@ function initUI(){
     const sec=Math.floor(g*2)/2;
     if(!force&&sec===lastSecond) return; lastSecond=sec;
     $("scrub").value=Math.round(g);
-    let per=g>=3600?4:Math.floor(g/1200)+1, rem;
-    if(g>0&&g<=3600&&Math.abs(g%1200)<1e-6){per=Math.round(g/1200);rem=0}
-    else rem=(per<4?per*1200:4800)-g;
-    if(g>=G.T-0.001&&G.T>3600){per=4;rem=4800-G.T}
-    $("per").textContent=PER_NAMES[per-1]; $("clock").textContent=fmtClock(rem);
+    const nP=G.nPer;
+    let per=Math.min(Math.floor(g/1200)+1,nP), rem;
+    if(g>0&&g<=nP*1200&&Math.abs(g%1200)<1e-6){per=Math.round(g/1200);rem=0}
+    else rem=per*1200-g;
+    if(g>=G.T-0.001&&G.T>3600){per=nP;rem=nP*1200-G.T}
+    $("per").textContent=perName(per,nP); $("clock").textContent=fmtClock(rem);
     const sc=scoreAt(g+0.0001);
     $("scAway").textContent=sc.away; $("scHome").textContent=sc.home;
     const sh={away:0,home:0}; G.shots.forEach(s=>{if(s.t<=g)sh[s.side]++});
@@ -178,12 +180,12 @@ function initUI(){
       lastFeedCount=evs.length; const f=$("feed");
       if(!evs.length){f.innerHTML='<li class="empty">Mise au jeu initiale. Appuyez sur lecture.</li>';return}
       f.innerHTML=evs.slice().reverse().map(e=>{
-        const when=e.type==="final"?"":(PER_SHORT[(e.type==="end"?e.per:(e.g||e.p).per)-1]+" "+(e.type==="end"?"":fmt((e.g||e.p).sec)));
+        const when=e.type==="final"?"":(perShort(e.type==="end"?e.per:(e.g||e.p).per,G.nPer)+" "+(e.type==="end"?"":fmt((e.g||e.p).sec)));
         let body="";
         if(e.type==="goal"){const x=e.g;body=`<span class="goal"><span class="tag" style="background:${dotColor(G,x.side)}"></span>But ${esc2(G.team[x.side].abbr)} : ${esc2(x.scorer?x.scorer.name:"")}</span>${x.assists.length?" ("+x.assists.map(p=>esc2(p.name)).join(", ")+")":" (sans aide)"}${x.ppGoal?", AN":""}`}
         else if(e.type==="pen"){const p=e.p;body=`Pénalité ${esc2(G.team[p.side].abbr)} : ${esc2(p.p?p.p.name:"")}, ${esc2(p.inf.toLowerCase())}, ${esc2(p.label)}`}
-        else if(e.type==="end"){body=`Fin de la ${PER_NAMES[e.per-1]}`}
-        else {const s2=scoreAt(G.T+1);body=`<span class="goal">Final : ${esc2(G.team.away.abbr)} ${s2.away}, ${esc2(G.team.home.abbr)} ${s2.home}</span>`}
+        else if(e.type==="end"){body=`Fin de la ${perName(e.per,G.nPer)}`}
+        else {const s2=scoreAt(G.T+1);body=`<span class="goal">Final${G.T>3600?" ("+finalOT()+")":""} : ${esc2(G.team.away.abbr)} ${s2.away}, ${esc2(G.team.home.abbr)} ${s2.home}${s2.away===s2.home?", match nul":""}</span>`}
         return `<li data-t="${e.t}"><span class="ft">${when}</span><span>${body}</span></li>`;
       }).join("");
       f.querySelectorAll("li[data-t]").forEach(li=>li.onclick=()=>{const t=+li.dataset.t;seek(Math.max(0,t-8))});
