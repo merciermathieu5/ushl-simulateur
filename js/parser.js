@@ -55,11 +55,24 @@ function parseLines(raw){
 }
 
 /* ---------- Analyse du sommaire ---------- */
+const GAME_HEADER=/^([A-Za-z][A-Za-z.]+)\s+(?:at|@|à|vs\.?)\s+([A-Za-z][A-Za-z.]+)$/;
+// Plusieurs sommaires collés à la suite : un morceau par match (pages HTML ou en-têtes « ÉQUIPE at ÉQUIPE »).
+function splitGames(raw){
+  const html=[...raw.matchAll(/<HTML\b/gi)].map(m=>m.index);
+  let parts;
+  if(html.length>1) parts=html.map((p,i)=>raw.slice(i?p:0,html[i+1]));
+  else{
+    const lines=raw.split("\n"), idx=lines.map((l,i)=>GAME_HEADER.test(l.trim())?i:-1).filter(i=>i>=0);
+    if(idx.length<2) return [raw];
+    parts=idx.map((p,i)=>lines.slice(i?p:0,idx[i+1]).join("\n"));
+  }
+  return parts.filter(p=>p.trim());
+}
 function parseSummary(raw){
   const text=htmlToText(raw).replace(/\r/g,"").replace(/\u00a0/g," ");
   const lines=text.split("\n");
   const S={away:null,home:null,shotRows:{},goals:[],pens:[],goalies:[],players:{away:[],home:[]},stars:[],pp:{},attendance:null};
-  for(const l of lines){const m=l.trim().match(/^([A-Za-z][A-Za-z.]+)\s+(?:at|@|à|vs\.?)\s+([A-Za-z][A-Za-z.]+)$/);if(m){S.away=m[1].toUpperCase();S.home=m[2].toUpperCase();break}}
+  for(const l of lines){const m=l.trim().match(GAME_HEADER);if(m){S.away=m[1].toUpperCase();S.home=m[2].toUpperCase();break}}
   if(!S.away) throw new Error("Je ne trouve pas la ligne « ÉQUIPE at ÉQUIPE » au début du sommaire. Vérifiez que tout le sommaire a été copié.");
   for(const side of SIDES){
     const re=new RegExp(esc(S[side])+"\\s+((?:\\d+\\s+){2,}\\d+)","g");const rows=[];

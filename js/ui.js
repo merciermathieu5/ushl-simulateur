@@ -19,9 +19,12 @@ function initUI(){
   $("clearLines").onclick=()=>{linesIn.value="";$("linesNote").textContent="";linesIn.focus()};
   $("snapLines").onclick=()=>useSnapshot(false);
   $("go").onclick=start;
-  $("newGame").onclick=()=>{playing=false;updatePlayIcon();$("game").hidden=true;$("setup").hidden=false;$("newGame").hidden=true;window.scrollTo(0,0)};
+  const showSetup=()=>{playing=false;updatePlayIcon();$("game").hidden=true;$("setup").hidden=false;$("newGame").hidden=true;$("share").hidden=true;window.scrollTo(0,0)};
+  $("newGame").onclick=()=>{showSetup();if(location.hash) history.replaceState(null,"",location.pathname+location.search)};
+  $("share").onclick=shareLink;
+  $("gamePick").onchange=e=>play(games[+e.target.value],curL);
 
-  let G=null, g=0, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
+  let G=null, g=0, games=[], curRaw="", curL=null, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
   const renderer=createRenderer($("rink"));
   const draw=()=>renderer.draw({G,g,posMap,current,freezeUntil,hitFx,showNames:$("showNames").checked});
   window.addEventListener("resize",()=>{if(G){renderer.resize();draw()}});
@@ -32,17 +35,44 @@ function initUI(){
     $("err").textContent="";
     const raw=sumIn.value;
     if(!raw.trim()){$("err").textContent="Collez d’abord un sommaire de match, ou chargez l’exemple.";return}
-    let S;
-    try{S=parseSummary(raw)}catch(e){$("err").textContent=e.message;return}
+    // un ou plusieurs matchs ; les morceaux illisibles sont écartés
+    let firstErr=null;
+    const list=splitGames(raw).map(r=>{try{return {raw:r,S:parseSummary(r)}}catch(e){firstErr=firstErr||e;return null}}).filter(Boolean);
+    if(!list.length){$("err").textContent=firstErr.message;return}
     const L=parseLines(linesIn.value);
     // l'instantané n'est pas enregistré : une mise à jour du dépôt sera ainsi visible
     if(linesIn.value.trim()===snapText) store.del("ushl-sim-lines"); else store.set("ushl-sim-lines",linesIn.value);
     store.set("ushl-sim-summary",raw);
-    try{G=buildGame(S,L,raw)}catch(e){console.error(e);$("err").textContent="Le match n’a pas pu être construit : "+e.message;return}
-    setupGame();
+    setGames(list);
+    play(list[0],L);
+  }
+  function setGames(list){
+    games=list; const sel=$("gamePick");
+    sel.innerHTML=list.map((x,i)=>`<option value="${i}">${i+1}. ${esc2(teamInfo(x.S.away).name)} à ${esc2(teamInfo(x.S.home).name)}</option>`).join("");
+    $("gameBar").hidden=list.length<2;
+  }
+  function play(game,L){
+    try{G=buildGame(game.S,L,game.raw)}catch(e){console.error(e);$("err").textContent="Le match n’a pas pu être construit : "+e.message;return false}
+    curRaw=game.raw; curL=L; $("gamePick").value=String(games.indexOf(game));
+    setupGame(); return true;
+  }
+  /* Partage */
+  async function shareLink(){
+    if(!canShare()){showToastText("Ce navigateur ne permet pas de créer un lien de partage.");return}
+    const url=location.href.split("#")[0]+"#m="+await packShare(curRaw,linesSubset(curL,G.S));
+    history.replaceState(null,"",url);
+    try{await navigator.clipboard.writeText(url);showToastText("Lien copié. Collez-le pour partager ce match.")}
+    catch(e){window.prompt("Copiez ce lien :",url)}
+  }
+  async function openShared(){
+    const m=location.hash.match(/^#m=([A-Za-z0-9_-]+)$/); if(!m) return;
+    try{
+      const {raw,L}=await unpackShare(m[1]);
+      sumIn.value=raw; setGames([{raw,S:parseSummary(raw)}]); play(games[0],L);
+    }catch(e){console.error(e);showSetup();$("err").textContent="Ce lien de partage est invalide ou incomplet."}
   }
   function setupGame(){
-    $("setup").hidden=true;$("game").hidden=false;$("newGame").hidden=false;
+    $("setup").hidden=true;$("game").hidden=false;$("newGame").hidden=false;$("share").hidden=false;
     SIDES.forEach(s=>{
       const tm=G.team[s], cap=s==="away"?"Away":"Home";
       $("n"+cap).textContent=tm.name; $("c"+cap).style.background=luminance(tm.c1)<0.03?tm.c2:tm.c1;
@@ -104,6 +134,7 @@ function initUI(){
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  openShared(); window.addEventListener("hashchange",openShared);
 
   function triggerStop(s,now){
     if(s.type==="goal"){
@@ -125,7 +156,8 @@ function initUI(){
     if(s.type==="pull") return "Filet désert : "+G.team[s.side].abbr+" retire son gardien";
     return "Changement de gardien "+G.team[s.side].abbr+" : "+s.in.name+" remplace "+s.out.name;
   }
-  function showToast(s){const el=$("toast");el.textContent=softText(s);el.hidden=false;toastUntil=performance.now()+2600}
+  function showToast(s){showToastText(softText(s))}
+  function showToastText(text){const el=$("toast");el.textContent=text;el.hidden=false;toastUntil=performance.now()+2600}
   function showBanner(html){const b=$("banner");b.innerHTML=html;b.hidden=false}
   function hideBanner(){$("banner").hidden=true}
   function showFinal(){
