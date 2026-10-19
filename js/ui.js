@@ -6,13 +6,18 @@ if(typeof document!=="undefined") initUI();
 function initUI(){
   const $=id=>document.getElementById(id);
   const sumIn=$("sumIn"), linesIn=$("linesIn");
-  const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+  const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+  const snapText=htmlToText(LINES_SNAPSHOT).replace(/\n{3,}/g,"\n\n").trim();
+  const useSnapshot=newer=>{linesIn.value=snapText;$("linesNote").textContent="(instantané du "+LINES_SNAPSHOT_DATE+(newer?", plus récent que votre dernière version":"")+")"};
   const savedLines=store.get("ushl-sim-lines"), savedSum=store.get("ushl-sim-summary");
-  if(savedLines!==null){linesIn.value=savedLines;$("linesNote").textContent="(dernière version collée)"}
-  else{linesIn.value=htmlToText(LINES_SNAPSHOT).replace(/\n{3,}/g,"\n\n").trim();$("linesNote").textContent="(instantané du "+LINES_SNAPSHOT_DATE+")"}
+  // Une version collée plus ancienne que l'instantané est remplacée par celui-ci.
+  const savedDate=linesDate(savedLines), snapDate=linesDate(LINES_SNAPSHOT);
+  if(savedLines!==null&&!(savedDate&&snapDate&&savedDate<snapDate)){linesIn.value=savedLines;$("linesNote").textContent="(dernière version collée)"}
+  else useSnapshot(savedLines!==null);
   if(savedSum) sumIn.value=savedSum;
   $("example").onclick=()=>{sumIn.value=SAMPLE_SUMMARY;$("err").textContent=""};
   $("clearLines").onclick=()=>{linesIn.value="";$("linesNote").textContent="";linesIn.focus()};
+  $("snapLines").onclick=()=>useSnapshot(false);
   $("go").onclick=start;
   $("newGame").onclick=()=>{playing=false;updatePlayIcon();$("game").hidden=true;$("setup").hidden=false;$("newGame").hidden=true;window.scrollTo(0,0)};
 
@@ -30,7 +35,9 @@ function initUI(){
     let S;
     try{S=parseSummary(raw)}catch(e){$("err").textContent=e.message;return}
     const L=parseLines(linesIn.value);
-    store.set("ushl-sim-lines",linesIn.value); store.set("ushl-sim-summary",raw);
+    // l'instantané n'est pas enregistré : une mise à jour du dépôt sera ainsi visible
+    if(linesIn.value.trim()===snapText) store.del("ushl-sim-lines"); else store.set("ushl-sim-lines",linesIn.value);
+    store.set("ushl-sim-summary",raw);
     try{G=buildGame(S,L,raw)}catch(e){console.error(e);$("err").textContent="Le match n’a pas pu être construit : "+e.message;return}
     setupGame();
   }

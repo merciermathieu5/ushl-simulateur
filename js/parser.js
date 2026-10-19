@@ -128,3 +128,12 @@ function parsePens(t,per,S){
     S.pens.push({per,sec,t:(per-1)*1200+sec,name:m[1].trim(),abbr:m[2],inf:m[3].trim(),kind:(m[4]||"Minor").trim()});
   }
 }
+
+/* ---------- Date « As of » de la page des trios ---------- */
+const MONTHS={JAN:0,FEB:1,FEV:1,MAR:2,APR:3,AVR:3,MAY:4,MAI:4,JUN:5,JUL:6,AUG:7,AOU:7,SEP:8,OCT:9,NOV:10,DEC:11};
+function linesDate(raw){
+  const m=(raw||"").match(/As of\s+(?:[^\s,()]+,\s*)?([^\s\d,()]+)\s+(\d{1,2}),?\s+(\d{4})/i);
+  if(!m) return null;
+  const mo=norm(m[1]); const i=mo.startsWith("JUI")?{N:5,L:6}[mo[3]]:MONTHS[mo.slice(0,3)];
+  return i===undefined?null:new Date(+m[3],i,+m[2]).getTime();
+}

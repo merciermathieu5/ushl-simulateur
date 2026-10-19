@@ -6,7 +6,7 @@ const FILES=["data/sample-summary.js","data/lines-snapshot.js","js/util.js","js/
 
 function load(){
   const src=FILES.map(f=>fs.readFileSync(path.join(ROOT,f),"utf8").replace(/^"use strict";/,"")).join("\n");
-  const names=["SAMPLE_SUMMARY","LINES_SNAPSHOT","LINES_SNAPSHOT_DATE","parseSummary","parseLines","buildGame","targetsAt","puckAt","htmlToText"];
+  const names=["SAMPLE_SUMMARY","LINES_SNAPSHOT","LINES_SNAPSHOT_DATE","parseSummary","parseLines","buildGame","targetsAt","puckAt","htmlToText","linesDate"];
   const ctx={console};
   vm.createContext(ctx);
   vm.runInContext('"use strict";\n'+src+"\n;globalThis.__api={"+names.map(n=>`${n}:typeof ${n}!=="undefined"?${n}:undefined`).join(",")+"};",ctx);

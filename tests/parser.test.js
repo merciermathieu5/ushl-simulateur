@@ -40,3 +40,11 @@ test("analyse de la page des trios",()=>{
   // la version texte de la page donne le même résultat
   assert.deepStrictEqual(plain(api.parseLines(api.htmlToText(api.LINES_SNAPSHOT))),plain(L));
 });
+
+test("date « As of » de la page des trios",()=>{
+  const d=api.linesDate(api.LINES_SNAPSHOT);
+  assert.strictEqual(new Date(d).toDateString(),"Sun Oct 18 2026");
+  assert.ok(api.linesDate("As of Monday, Nov 2, 2026")>d);
+  assert.strictEqual(new Date(api.linesDate("As of mardi, juil 7 2026")).getMonth(),6);
+  assert.strictEqual(api.linesDate("pas de date"),null);
+});
