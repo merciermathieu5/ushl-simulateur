@@ -23,6 +23,25 @@
   </header>
 
   <section id="setup" class="setup">
+    <section id="autoBox" class="auto" aria-labelledby="autoTitle" hidden>
+      <div class="autohead">
+        <h2 id="autoTitle">Matchs de la ligue</h2>
+        <label class="ctl" id="autoSeasonWrap" hidden>Saison <select id="autoSeason"></select></label>
+      </div>
+      <p class="lead" id="autoMeta">Mis à jour automatiquement après chaque simulation.</p>
+      <p class="lead" id="autoEmpty" hidden>Aucun match simulé pour l’instant. Les matchs apparaîtront ici d’eux-mêmes après la première simulation de la saison.</p>
+      <div id="autoMain" hidden>
+        <div class="daynav">
+          <button class="ib" id="autoPrev" aria-label="Soirée précédente" title="Soirée précédente"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7z"/></svg></button>
+          <select id="autoDay" aria-label="Soirée"></select>
+          <button class="ib" id="autoNext" aria-label="Soirée suivante" title="Soirée suivante"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7z"/></svg></button>
+          <button class="btn" id="autoNight" hidden></button>
+        </div>
+        <ul class="gcards" id="autoCards"></ul>
+      </div>
+      <button class="linkbtn" id="manualToggle" aria-controls="manualBox" aria-expanded="false">Coller un sommaire à la main</button>
+    </section>
+    <div id="manualBox">
     <h2>Rejouez un match à partir de son sommaire</h2>
     <p class="lead">Collez le sommaire d’un match FHL, en texte copié de la page ou en code HTML. Les trios servent à mettre les bons joueurs ensemble sur la glace. Tout reste dans votre navigateur.</p>
     <div class="fields">
@@ -42,6 +61,7 @@
       <button class="btn" id="example">Charger l’exemple</button>
       <button class="btn" id="clearLines">Vider les trios</button>
       <button class="btn" id="snapLines">Revenir à l’instantané</button>
+    </div>
     </div>
     <p id="err" class="err" role="alert"></p>
   </section>
@@ -99,5 +119,6 @@
 <script src="js/renderer.js"></script>
 <script src="js/share.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/auto.js"></script>
 </body>
 </html>

@@ -1,0 +1,2 @@
+# Fichiers réels de ushl.ca (Windows-1252) : gardés octet pour octet, sans conversion des fins de ligne.
+tests/fixtures/auto/** -text

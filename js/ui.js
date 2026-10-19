@@ -20,11 +20,12 @@ function initUI(){
   $("snapLines").onclick=()=>useSnapshot(false);
   $("go").onclick=start;
   const showSetup=()=>{playing=false;updatePlayIcon();$("game").hidden=true;$("setup").hidden=false;$("newGame").hidden=true;$("share").hidden=true;window.scrollTo(0,0)};
-  $("newGame").onclick=()=>{showSetup();if(location.hash) history.replaceState(null,"",location.pathname+location.search)};
+  // history.replaceState échoue sur une page ouverte depuis le disque (file://) : on s'en passe alors.
+  $("newGame").onclick=()=>{showSetup();if(location.hash) try{history.replaceState(null,"",location.pathname+location.search)}catch(err){}};
   $("share").onclick=shareLink;
-  $("gamePick").onchange=e=>play(games[+e.target.value],curL);
+  $("gamePick").onchange=e=>{const x=games[+e.target.value];play(x,curL);if(x.id&&location.hash!=="#match="+x.id)try{history.replaceState(null,"","#match="+x.id)}catch(err){}};
 
-  let G=null, g=0, games=[], skippedNote="", curRaw="", curL=null, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
+  let G=null, g=0, games=[], skippedNote="", curRaw="", curL=null, curGame=null, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
   const renderer=createRenderer($("rink"));
   const reduceMotion=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const draw=()=>renderer.draw({G,g,posMap,current,freezeUntil,hitFx,showNames:$("showNames").checked});
@@ -45,6 +46,7 @@ function initUI(){
     // l'instantané n'est pas enregistré : une mise à jour du dépôt sera ainsi visible
     if(linesIn.value.trim()===snapText) store.del("ushl-sim-lines"); else store.set("ushl-sim-lines",linesIn.value);
     store.set("ushl-sim-summary",raw);
+    if(location.hash.startsWith("#match=")) try{history.replaceState(null,"",location.pathname+location.search)}catch(err){}
     setGames(list,chunks.length-list.length);
     play(list[0],L);
   }
@@ -55,15 +57,24 @@ function initUI(){
     $("gameBar").hidden=list.length<2;
   }
   function play(game,L){
-    try{G=buildGame(game.S,L,game.raw)}catch(e){console.error(e);$("err").textContent="Le match n’a pas pu être construit : "+e.message;return false}
-    curRaw=game.raw; curL=L; $("gamePick").value=String(games.indexOf(game));
+    // un match récupéré automatiquement porte les trios publiés avec sa simulation
+    const lines=game.L||L;
+    try{G=buildGame(game.S,lines,game.raw)}catch(e){console.error(e);$("err").textContent="Le match n’a pas pu être construit : "+e.message;return false}
+    curRaw=game.raw; curL=game.L?curL:L; curGame=game; $("gamePick").value=String(games.indexOf(game));
     setupGame(); return true;
   }
+  // Point d'entrée pour js/auto.js : une liste de matchs {raw, S, L, id, note} déjà prêts à jouer.
+  window.USHL_UI={
+    jouer(list,i){$("err").textContent="";setGames(list,0);return play(list[i||0],curL||{teams:{},pos:{}})},
+    erreur(msg){showSetup();$("err").textContent=msg},
+    accueil(){showSetup()}
+  };
   /* Partage */
   async function shareLink(){
-    if(!canShare()){showToastText("Ce navigateur ne permet pas de créer un lien de partage.");return}
-    const url=location.href.split("#")[0]+"#m="+await packShare(curRaw,linesSubset(curL,G.S));
-    history.replaceState(null,"",url);
+    const auto=curGame&&curGame.id;
+    if(!auto&&!canShare()){showToastText("Ce navigateur ne permet pas de créer un lien de partage.");return}
+    const url=location.href.split("#")[0]+(auto?"#match="+curGame.id:"#m="+await packShare(curRaw,linesSubset(curL,G.S)));
+    try{history.replaceState(null,"",url)}catch(err){}
     try{await navigator.clipboard.writeText(url);showToastText("Lien copié. Collez-le pour partager ce match.")}
     catch(e){window.prompt("Copiez ce lien :",url)}
   }
@@ -89,7 +100,7 @@ function initUI(){
     const d=SIDES.map(s=>{const q=G.diag[s];const nm=G.team[s].name;
       if(!q.hasTeam) return nm+" : trios introuvables, alignement bâti selon le temps de glace";
       return nm+" : "+q.fromLines+" joueur"+(q.fromLines>1?"s":"")+" sur "+q.total+" placés selon les trios, les autres selon le temps de glace";});
-    $("diag").textContent=d.join(". ")+"."+skippedNote;
+    $("diag").textContent=d.join(". ")+"."+skippedNote+(curGame&&curGame.note?" "+curGame.note:"");
     $("bsBody").innerHTML=boxScore();
     renderer.resize(); posMap=new Map(); lastFeedCount=-1; lastSecond=-1; freezeUntil=0; bannerSticky=false; hideBanner(); $("toast").hidden=true;
     seek(0); playing=false; updatePlayIcon();

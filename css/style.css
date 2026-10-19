@@ -50,6 +50,22 @@ textarea{width:100%;min-height:300px;resize:vertical;border:1px solid var(--line
 .hint{color:var(--muted);font-size:.9rem;margin:2px 0 0}
 .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
 .err{color:var(--red);font-weight:600;min-height:1.4em;margin:10px 0 0}
+/* Matchs de la ligue (récupérés automatiquement) */
+.auto{margin:0 0 26px}
+.autohead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.daynav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
+.daynav select{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:8px 10px;min-width:0;max-width:min(100%,440px)}
+.ib:disabled{opacity:.4;cursor:default}
+.gcards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.gcard{width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:3px}
+.gcard:hover{border-color:var(--muted);background:var(--surface2)}
+.crow{display:flex;align-items:center;gap:9px;font-size:1.05rem}
+.crow .chip{width:6px;height:20px;align-self:center}
+.cname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.cscore{font-family:"Barlow Condensed",Barlow,sans-serif;font-weight:600;font-size:1.4rem;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--muted)}
+.crow.win .cname,.crow.win .cscore{color:var(--ink);font-weight:700}
+.cfoot{color:var(--muted);font-size:.85rem;margin-top:3px}
+.linkbtn{background:none;border:none;padding:4px 0;margin-top:14px;color:var(--blue);text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-size:.95rem}
 /* Scoreboard */
 .board{background:var(--board);color:var(--board-ink);border-radius:14px 14px 0 0;display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch}
 .tm{display:flex;align-items:center;gap:14px;padding:12px 18px}
