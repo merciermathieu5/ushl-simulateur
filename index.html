@@ -47,6 +47,7 @@
   </section>
 
   <section id="game" hidden>
+    <div id="live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <div class="gamebar" id="gameBar" hidden><label class="ctl">Match <select id="gamePick"></select></label></div>
     <div class="board" aria-live="off">
       <div class="tm away"><span class="chip" id="cAway"></span><div class="info"><div class="tname" id="nAway"></div><div class="tside" id="sAway"></div></div><div class="tscore" id="scAway">0</div></div>
@@ -54,7 +55,7 @@
       <div class="tm home"><span class="chip" id="cHome"></span><div class="info"><div class="tname" id="nHome"></div><div class="tside" id="sHome"></div></div><div class="tscore" id="scHome">0</div></div>
     </div>
     <div class="stage">
-      <canvas id="rink" aria-label="Patinoire animée"></canvas>
+      <canvas id="rink" role="img" aria-label="Patinoire animée"></canvas>
       <div id="banner" class="banner" hidden></div>
       <div id="toast" class="toast" hidden></div>
     </div>

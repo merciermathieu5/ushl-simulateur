@@ -26,6 +26,7 @@ function initUI(){
 
   let G=null, g=0, games=[], curRaw="", curL=null, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
   const renderer=createRenderer($("rink"));
+  const reduceMotion=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const draw=()=>renderer.draw({G,g,posMap,current,freezeUntil,hitFx,showNames:$("showNames").checked});
   window.addEventListener("resize",()=>{if(G){renderer.resize();draw()}});
   if(window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{renderer.readTheme();if(G)draw()});
@@ -121,7 +122,7 @@ function initUI(){
         crossed.filter(s=>SOFT.has(s.type)&&(!hard||s.t<=hard.t)).forEach(s=>showToast(s));
         if(hard){ng=hard.t;triggerStop(hard,now)}
         if(ng>=G.T){ng=G.T;playing=false;updatePlayIcon();showFinal()}
-        G.hits.forEach(h=>{if(h.t>g&&h.t<=ng)hitFx.push({h,until:now+700})});
+        if(!reduceMotion) G.hits.forEach(h=>{if(h.t>g&&h.t<=ng)hitFx.push({h,until:now+700})});
         dtG=ng-g; g=ng;
       }
       stepPositions(dtG);
@@ -142,10 +143,13 @@ function initUI(){
       const gg=s.g; const tm=G.team[gg.side];
       const ast=gg.assists.length?"Aides : "+gg.assists.map(p=>p.name).join(", "):"Sans aide";
       const tags=[]; if(gg.ppGoal||/PP/.test(gg.tag))tags.push("en avantage numérique"); if(/SH/.test(gg.tag))tags.push("en désavantage numérique"); if(/EN/.test(gg.tag))tags.push("dans un filet désert");
+      const after=scoreAt(gg.t+0.001);
+      announce(`But ${tm.name}, ${gg.scorer?gg.scorer.name:""}. ${ast}. ${G.team.away.name} ${after.away}, ${G.team.home.name} ${after.home}.`);
       showBanner(`<div class="big goal">But ${esc2(tm.abbr)} !</div><div class="mid">${esc2(gg.scorer?gg.scorer.name:"")}</div><div class="small">${esc2(ast)}</div><div class="small">${perShort(gg.per,G.nPer)} ${gg.per>=4?"":"période "}à ${fmt(gg.sec)}${tags.length?", "+tags.join(", "):""}</div>`);
     } else if(s.type==="end"){
       freezeUntil=now+1700; bannerUntil=now+1700;
       const sc=scoreAt(s.t+0.001);
+      announce(`Fin de la ${perName(s.per,G.nPer)}. ${G.team.away.name} ${sc.away}, ${G.team.home.name} ${sc.home}.`);
       showBanner(`<div class="big">Fin de la ${perName(s.per,G.nPer)}</div><div class="small">${esc2(G.team.away.abbr)} ${sc.away}, ${esc2(G.team.home.abbr)} ${sc.home}</div>`);
     }
   }
@@ -157,11 +161,14 @@ function initUI(){
     return "Changement de gardien "+G.team[s.side].abbr+" : "+s.in.name+" remplace "+s.out.name;
   }
   function showToast(s){showToastText(softText(s))}
-  function showToastText(text){const el=$("toast");el.textContent=text;el.hidden=false;toastUntil=performance.now()+2600}
+  function showToastText(text){const el=$("toast");el.textContent=text;el.hidden=false;toastUntil=performance.now()+2600;announce(text)}
+  // annonces pour les lecteurs d'écran
+  function announce(text){$("live").textContent=text}
   function showBanner(html){const b=$("banner");b.innerHTML=html;b.hidden=false}
   function hideBanner(){$("banner").hidden=true}
   function showFinal(){
     const sc=scoreAt(G.T+1); const ot=G.T>3600;
+    announce(`Final${ot?" en prolongation":""} : ${G.team.away.name} ${sc.away}, ${G.team.home.name} ${sc.home}${sc.away===sc.home?", match nul":""}.`);
     const stars=G.S.stars.slice(0,3).map(s=>`<li>${"★".repeat(4-s.n)} ${esc2(s.name)} (${esc2(s.abbr)})</li>`).join("");
     showBanner(`<div class="big">Final${ot?" ("+finalOT()+")":""}</div><div class="mid">${esc2(G.team.away.name)} ${sc.away}, ${esc2(G.team.home.name)} ${sc.home}</div>${sc.away===sc.home?`<div class="small">Match nul</div>`:""}${stars?`<ul class="stars">${stars}</ul>`:""}${G.S.attendance?`<div class="small">Assistance : ${esc2(G.S.attendance)}</div>`:""}`);
     bannerSticky=true;
@@ -217,6 +224,7 @@ function initUI(){
     else rem=per*1200-g;
     if(g>=G.T-0.001&&G.T>3600){per=nP;rem=nP*1200-G.T}
     $("per").textContent=perName(per,nP); $("clock").textContent=fmtClock(rem);
+    $("scrub").setAttribute("aria-valuetext",perName(per,nP)+", "+fmtClock(rem));
     const sc=scoreAt(g+0.0001);
     $("scAway").textContent=sc.away; $("scHome").textContent=sc.home;
     const sh={away:0,home:0}; G.shots.forEach(s=>{if(s.t<=g)sh[s.side]++});
@@ -255,9 +263,13 @@ function initUI(){
         else if(e.type==="pull"||e.type==="goalie"){body=esc2(softText(e))}
         else if(e.type==="end"){body=`Fin de la ${perName(e.per,G.nPer)}`}
         else {const s2=scoreAt(G.T+1);body=`<span class="goal">Final${G.T>3600?" ("+finalOT()+")":""} : ${esc2(G.team.away.abbr)} ${s2.away}, ${esc2(G.team.home.abbr)} ${s2.home}${s2.away===s2.home?", match nul":""}</span>`}
-        return `<li data-t="${e.t}"><span class="ft">${when}</span><span>${body}</span></li>`;
+        return `<li data-t="${e.t}" tabindex="0" role="button"><span class="ft">${when}</span><span>${body}</span></li>`;
       }).join("");
-      f.querySelectorAll("li[data-t]").forEach(li=>li.onclick=()=>{const t=+li.dataset.t;seek(Math.max(0,t-8))});
+      f.querySelectorAll("li[data-t]").forEach(li=>{
+        const go=()=>seek(Math.max(0,+li.dataset.t-8));
+        li.onclick=go;
+        li.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();go()}};
+      });
     }
   }
 }
