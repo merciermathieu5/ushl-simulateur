@@ -111,10 +111,10 @@ canvas{display:block;width:100%;height:auto}
 .feed .tag{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
 .feed .empty{color:var(--muted);cursor:default;grid-template-columns:1fr}
 /* Feuille de match */
-.bs{margin-top:16px}
+.bs{margin-top:16px;min-width:0}
 .bs h4{margin:14px 0 6px;font-size:1rem;display:flex;align-items:center;gap:8px}
 .bs h4 .dot{width:10px;height:10px;border-radius:50%;flex:none}
-.bsgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.bsgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
 .tw{overflow-x:auto}
 .bs table{border-collapse:collapse;width:100%;font-size:.92rem;font-variant-numeric:tabular-nums}
 .bs th,.bs td{padding:4px 6px;border-bottom:1px solid var(--surface2);text-align:right;white-space:nowrap}
@@ -128,7 +128,7 @@ canvas{display:block;width:100%;height:auto}
   .fields{grid-template-columns:1fr}
   textarea{min-height:200px}
   .panels{grid-template-columns:1fr}
-  .bsgrid{grid-template-columns:1fr}
+  .bsgrid{grid-template-columns:minmax(0,1fr)}
   .tm{padding:10px 10px;gap:8px}
   .tname{font-size:1.1rem}
   .tscore{font-size:2.5rem}

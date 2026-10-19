@@ -24,7 +24,7 @@ function initUI(){
   $("share").onclick=shareLink;
   $("gamePick").onchange=e=>play(games[+e.target.value],curL);
 
-  let G=null, g=0, games=[], curRaw="", curL=null, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
+  let G=null, g=0, games=[], skippedNote="", curRaw="", curL=null, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
   const renderer=createRenderer($("rink"));
   const reduceMotion=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const draw=()=>renderer.draw({G,g,posMap,current,freezeUntil,hitFx,showNames:$("showNames").checked});
@@ -38,17 +38,19 @@ function initUI(){
     if(!raw.trim()){$("err").textContent="Collez d’abord un sommaire de match, ou chargez l’exemple.";return}
     // un ou plusieurs matchs ; les morceaux illisibles sont écartés
     let firstErr=null;
-    const list=splitGames(raw).map(r=>{try{return {raw:r,S:parseSummary(r)}}catch(e){firstErr=firstErr||e;return null}}).filter(Boolean);
+    const chunks=splitGames(raw);
+    const list=chunks.map(r=>{try{return {raw:r,S:parseSummary(r)}}catch(e){firstErr=firstErr||e;return null}}).filter(Boolean);
     if(!list.length){$("err").textContent=firstErr.message;return}
     const L=parseLines(linesIn.value);
     // l'instantané n'est pas enregistré : une mise à jour du dépôt sera ainsi visible
     if(linesIn.value.trim()===snapText) store.del("ushl-sim-lines"); else store.set("ushl-sim-lines",linesIn.value);
     store.set("ushl-sim-summary",raw);
-    setGames(list);
+    setGames(list,chunks.length-list.length);
     play(list[0],L);
   }
-  function setGames(list){
-    games=list; const sel=$("gamePick");
+  function setGames(list,skipped){
+    games=list; skippedNote=skipped?` ${skipped} sommaire${skipped>1?"s":""} illisible${skipped>1?"s":""} ignoré${skipped>1?"s":""}.`:"";
+    const sel=$("gamePick");
     sel.innerHTML=list.map((x,i)=>`<option value="${i}">${i+1}. ${esc2(teamInfo(x.S.away).name)} à ${esc2(teamInfo(x.S.home).name)}</option>`).join("");
     $("gameBar").hidden=list.length<2;
   }
@@ -87,7 +89,7 @@ function initUI(){
     const d=SIDES.map(s=>{const q=G.diag[s];const nm=G.team[s].name;
       if(!q.hasTeam) return nm+" : trios introuvables, alignement bâti selon le temps de glace";
       return nm+" : "+q.fromLines+" joueur"+(q.fromLines>1?"s":"")+" sur "+q.total+" placés selon les trios, les autres selon le temps de glace";});
-    $("diag").textContent=d.join(". ")+".";
+    $("diag").textContent=d.join(". ")+"."+skippedNote;
     $("bsBody").innerHTML=boxScore();
     renderer.resize(); posMap=new Map(); lastFeedCount=-1; lastSecond=-1; freezeUntil=0; bannerSticky=false; hideBanner(); $("toast").hidden=true;
     seek(0); playing=false; updatePlayIcon();

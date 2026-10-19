@@ -385,7 +385,9 @@ function buildGame(S,L,seedText){
   G.pulls.forEach(p=>{const ev={t:p.a,type:"pull",side:p.side,...at(p.a)};G.events.push(ev);G.stops.push(ev)});
   SIDES.forEach(s=>{const t=G.goalieSwap[s];if(t===undefined)return;const ev={t,type:"goalie",side:s,out:G.goalies[s][0],in:G.goalies[s][1],...at(t)};G.events.push(ev);G.stops.push(ev)});
   G.events.push({t:G.T,type:"final"});
-  G.events.sort((a,b)=>a.t-b.t||(a.type==="end"?1:-1)); G.stops.sort((a,b)=>a.t-b.t);
+  // à temps égal : l'événement, puis la fin de période, puis le final
+  const rank=e=>e.type==="final"?2:e.type==="end"?1:0;
+  G.events.sort((a,b)=>a.t-b.t||rank(a)-rank(b)); G.stops.sort((a,b)=>a.t-b.t);
   return G;
 }
 
