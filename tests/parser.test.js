@@ -56,3 +56,8 @@ test("en-têtes de prolongation",()=>{
     assert.strictEqual(S.goals[2].per,5,h);
   }
 });
+
+test("conversions en avantage numérique",()=>{
+  const S=api.parseSummary(api.SAMPLE_SUMMARY);
+  assert.deepStrictEqual(plain(S.pp),{NEWJERSEY:{g:0,n:4},TORONTO:{g:0,n:1}});
+});

@@ -58,7 +58,7 @@ function parseLines(raw){
 function parseSummary(raw){
   const text=htmlToText(raw).replace(/\r/g,"").replace(/\u00a0/g," ");
   const lines=text.split("\n");
-  const S={away:null,home:null,shotRows:{},goals:[],pens:[],goalies:[],players:{away:[],home:[]},stars:[],attendance:null};
+  const S={away:null,home:null,shotRows:{},goals:[],pens:[],goalies:[],players:{away:[],home:[]},stars:[],pp:{},attendance:null};
   for(const l of lines){const m=l.trim().match(/^([A-Za-z][A-Za-z.]+)\s+(?:at|@|à|vs\.?)\s+([A-Za-z][A-Za-z.]+)$/);if(m){S.away=m[1].toUpperCase();S.home=m[2].toUpperCase();break}}
   if(!S.away) throw new Error("Je ne trouve pas la ligne « ÉQUIPE at ÉQUIPE » au début du sommaire. Vérifiez que tout le sommaire a été copié.");
   for(const side of SIDES){
@@ -91,6 +91,11 @@ function parseSummary(raw){
     if(sec==="goalie"){
       const m=t.match(/^(.+?)\s*\(\s*([A-Za-z.]{1,4})\s*\)\s*,\s*(\d+)\s+saves?\s+out\s+of\s+(\d+)\s+shots?(?:\s*,\s*([A-Z]))?/i);
       if(m) S.goalies.push({name:m[1].trim(),abbr:m[2].toUpperCase(),saves:+m[3],shots:+m[4],dec:m[5]||""});
+      continue;
+    }
+    if(sec==="pp"){
+      const m=t.match(/^([A-Za-z][A-Za-z.]+)\s+(\d+)\s+(?:for|en|sur)\s+(\d+)/i);
+      if(m) S.pp[m[1].toUpperCase()]={g:+m[2],n:+m[3]};
       continue;
     }
     if(sec==="stars"){

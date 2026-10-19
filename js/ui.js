@@ -57,6 +57,7 @@ function initUI(){
       if(!q.hasTeam) return nm+" : trios introuvables, alignement bâti selon le temps de glace";
       return nm+" : "+q.fromLines+" joueur"+(q.fromLines>1?"s":"")+" sur "+q.total+" placés selon les trios, les autres selon le temps de glace";});
     $("diag").textContent=d.join(". ")+".";
+    $("bsBody").innerHTML=boxScore();
     renderer.resize(); posMap=new Map(); lastFeedCount=-1; lastSecond=-1; freezeUntil=0; bannerSticky=false; hideBanner(); $("toast").hidden=true;
     seek(0); playing=false; updatePlayIcon();
   }
@@ -124,6 +125,28 @@ function initUI(){
     showBanner(`<div class="big">Final${ot?" ("+finalOT()+")":""}</div><div class="mid">${esc2(G.team.away.name)} ${sc.away}, ${esc2(G.team.home.name)} ${sc.home}</div>${sc.away===sc.home?`<div class="small">Match nul</div>`:""}${stars?`<ul class="stars">${stars}</ul>`:""}${G.S.attendance?`<div class="small">Assistance : ${esc2(G.S.attendance)}</div>`:""}`);
     bannerSticky=true;
   }
+  /* Feuille de match */
+  const DEC_FR={W:"victoire",L:"défaite",T:"match nul",O:"défaite en prolongation"};
+  function boxScore(){
+    const pers=[1,2,3].concat(G.hasOT?[4]:[]);
+    const head=`<tr><th></th>${pers.map(p=>`<th>${p<4?p:"Prol."}</th>`).join("")}<th>T</th></tr>`;
+    const byPer=(list,side)=>{const n=pers.map(p=>list.filter(x=>x.side===side&&Math.min(4,x.per||(x.goal&&x.goal.per)||Math.floor(x.t/1200)+1)===p).length);
+      return n.map(v=>`<td>${v}</td>`).join("")+`<td class="tot">${n.reduce((a,b)=>a+b,0)}</td>`};
+    const tbl=(title,list)=>`<h4>${title}</h4><div class="tw"><table>${head}${SIDES.map(s=>`<tr><td>${esc2(G.team[s].name)}</td>${byPer(list,s)}</tr>`).join("")}</table></div>`;
+    const pp=SIDES.map(s=>{const v=G.S.pp[G.S[s]];return v?`${esc2(G.team[s].abbr)} : ${v.g} en ${v.n}`:null}).filter(Boolean);
+    const goalies=G.S.goalies.map(q=>{const pct=q.shots?(q.saves/q.shots*100).toFixed(1).replace(".",","):"";
+      return `<tr><td>${esc2(q.name)} (${esc2(q.abbr)})</td><td>${q.saves}</td><td>${q.shots}</td><td>${pct?pct+" %":""}</td><td>${DEC_FR[q.dec]||""}</td></tr>`}).join("");
+    const pm=v=>v>0?"+"+v:String(v);
+    const players=SIDES.map(s=>{
+      const rows=G.roster[s].filter(p=>!p.ghost&&(p.it>0||p.p||p.pim||p.s)).map(p=>`<tr><td>${esc2(p.name)}</td><td>${p.g}</td><td>${p.a}</td><td>${p.p}</td><td>${pm(p.pm)}</td><td>${p.pim}</td><td>${p.s}</td><td>${p.ht}</td><td>${p.it}</td></tr>`).join("");
+      return `<div><h4><span class="dot" style="background:${dotColor(G,s)}"></span>${esc2(G.team[s].name)}</h4><div class="tw"><table><tr><th>Joueur</th><th>B</th><th>A</th><th>PTS</th><th>+/-</th><th>PUN</th><th>T</th><th>MÉ</th><th>TG</th></tr>${rows}</table></div></div>`;
+    }).join("");
+    return `<div class="bsgrid"><div>${tbl("Buts",G.goals)}</div><div>${tbl("Tirs",G.shots)}</div></div>`
+      +(pp.length?`<h4>Avantages numériques</h4><p>${pp.join(", ")}</p>`:"")
+      +(goalies?`<h4>Gardiens</h4><div class="tw"><table><tr><th>Gardien</th><th>Arrêts</th><th>Tirs</th><th>%</th><th>Décision</th></tr>${goalies}</table></div>`:"")
+      +`<div class="bsgrid">${players}</div>`
+      +`<p class="legend">B : buts, A : aides, PTS : points, PUN : minutes de pénalité, T : tirs, MÉ : mises en échec, TG : temps de glace (min).</p>`;
+  }
   function finalOT(){return G.nPer>4?perShort(G.nPer,G.nPer):"prol."}
   function esc2(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
   function scoreAt(t){const o={away:0,home:0};G.goals.forEach(x=>{if(x.t<=t)o[x.side]++});return o}
@@ -174,6 +197,7 @@ function initUI(){
       const bx=[...G.boxedAt(s,g)].map(p=>esc2(p.name)).join(", ");
       el.innerHTML=`<h4><span class="dot" style="background:${dotColor(G,s)}"></span>${esc2(tm.name)}</h4><div class="st">${lab}</div><ul>${rows}</ul>${bx?`<div class="box">Au banc des pénalités : ${bx}</div>`:""}`;
     });
+    $("boxscore").hidden=g<G.T-0.01;
     // déroulement
     const evs=G.events.filter(e=>e.t<=g+0.0001&&!(e.type==="final"&&g<G.T-0.01));
     if(evs.length!==lastFeedCount){
