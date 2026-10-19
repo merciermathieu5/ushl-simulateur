@@ -6,19 +6,28 @@ if(typeof document!=="undefined") initUI();
 function initUI(){
   const $=id=>document.getElementById(id);
   const sumIn=$("sumIn"), linesIn=$("linesIn");
-  const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+  const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+  const snapText=htmlToText(LINES_SNAPSHOT).replace(/\n{3,}/g,"\n\n").trim();
+  const useSnapshot=newer=>{linesIn.value=snapText;$("linesNote").textContent="(instantané du "+LINES_SNAPSHOT_DATE+(newer?", plus récent que votre dernière version":"")+")"};
   const savedLines=store.get("ushl-sim-lines"), savedSum=store.get("ushl-sim-summary");
-  if(savedLines!==null){linesIn.value=savedLines;$("linesNote").textContent="(dernière version collée)"}
-  else{linesIn.value=htmlToText(LINES_SNAPSHOT).replace(/\n{3,}/g,"\n\n").trim();$("linesNote").textContent="(instantané du "+LINES_SNAPSHOT_DATE+")"}
+  // Une version collée plus ancienne que l'instantané est remplacée par celui-ci.
+  const savedDate=linesDate(savedLines), snapDate=linesDate(LINES_SNAPSHOT);
+  if(savedLines!==null&&!(savedDate&&snapDate&&savedDate<snapDate)){linesIn.value=savedLines;$("linesNote").textContent="(dernière version collée)"}
+  else useSnapshot(savedLines!==null);
   if(savedSum) sumIn.value=savedSum;
   $("example").onclick=()=>{sumIn.value=SAMPLE_SUMMARY;$("err").textContent=""};
   $("clearLines").onclick=()=>{linesIn.value="";$("linesNote").textContent="";linesIn.focus()};
+  $("snapLines").onclick=()=>useSnapshot(false);
   $("go").onclick=start;
-  $("newGame").onclick=()=>{playing=false;updatePlayIcon();$("game").hidden=true;$("setup").hidden=false;$("newGame").hidden=true;window.scrollTo(0,0)};
+  const showSetup=()=>{playing=false;updatePlayIcon();$("game").hidden=true;$("setup").hidden=false;$("newGame").hidden=true;$("share").hidden=true;window.scrollTo(0,0)};
+  $("newGame").onclick=()=>{showSetup();if(location.hash) history.replaceState(null,"",location.pathname+location.search)};
+  $("share").onclick=shareLink;
+  $("gamePick").onchange=e=>play(games[+e.target.value],curL);
 
-  let G=null, g=0, playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
+  let G=null, g=0, games=[], skippedNote="", curRaw="", curL=null, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
   const renderer=createRenderer($("rink"));
-  const draw=()=>renderer.draw({G,g,posMap,current,freezeUntil,showNames:$("showNames").checked});
+  const reduceMotion=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const draw=()=>renderer.draw({G,g,posMap,current,freezeUntil,hitFx,showNames:$("showNames").checked});
   window.addEventListener("resize",()=>{if(G){renderer.resize();draw()}});
   if(window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{renderer.readTheme();if(G)draw()});
   renderer.readTheme();
@@ -27,15 +36,46 @@ function initUI(){
     $("err").textContent="";
     const raw=sumIn.value;
     if(!raw.trim()){$("err").textContent="Collez d’abord un sommaire de match, ou chargez l’exemple.";return}
-    let S;
-    try{S=parseSummary(raw)}catch(e){$("err").textContent=e.message;return}
+    // un ou plusieurs matchs ; les morceaux illisibles sont écartés
+    let firstErr=null;
+    const chunks=splitGames(raw);
+    const list=chunks.map(r=>{try{return {raw:r,S:parseSummary(r)}}catch(e){firstErr=firstErr||e;return null}}).filter(Boolean);
+    if(!list.length){$("err").textContent=firstErr.message;return}
     const L=parseLines(linesIn.value);
-    store.set("ushl-sim-lines",linesIn.value); store.set("ushl-sim-summary",raw);
-    try{G=buildGame(S,L,raw)}catch(e){console.error(e);$("err").textContent="Le match n’a pas pu être construit : "+e.message;return}
-    setupGame();
+    // l'instantané n'est pas enregistré : une mise à jour du dépôt sera ainsi visible
+    if(linesIn.value.trim()===snapText) store.del("ushl-sim-lines"); else store.set("ushl-sim-lines",linesIn.value);
+    store.set("ushl-sim-summary",raw);
+    setGames(list,chunks.length-list.length);
+    play(list[0],L);
+  }
+  function setGames(list,skipped){
+    games=list; skippedNote=skipped?` ${skipped} sommaire${skipped>1?"s":""} illisible${skipped>1?"s":""} ignoré${skipped>1?"s":""}.`:"";
+    const sel=$("gamePick");
+    sel.innerHTML=list.map((x,i)=>`<option value="${i}">${i+1}. ${esc2(teamInfo(x.S.away).name)} à ${esc2(teamInfo(x.S.home).name)}</option>`).join("");
+    $("gameBar").hidden=list.length<2;
+  }
+  function play(game,L){
+    try{G=buildGame(game.S,L,game.raw)}catch(e){console.error(e);$("err").textContent="Le match n’a pas pu être construit : "+e.message;return false}
+    curRaw=game.raw; curL=L; $("gamePick").value=String(games.indexOf(game));
+    setupGame(); return true;
+  }
+  /* Partage */
+  async function shareLink(){
+    if(!canShare()){showToastText("Ce navigateur ne permet pas de créer un lien de partage.");return}
+    const url=location.href.split("#")[0]+"#m="+await packShare(curRaw,linesSubset(curL,G.S));
+    history.replaceState(null,"",url);
+    try{await navigator.clipboard.writeText(url);showToastText("Lien copié. Collez-le pour partager ce match.")}
+    catch(e){window.prompt("Copiez ce lien :",url)}
+  }
+  async function openShared(){
+    const m=location.hash.match(/^#m=([A-Za-z0-9_-]+)$/); if(!m) return;
+    try{
+      const {raw,L}=await unpackShare(m[1]);
+      sumIn.value=raw; setGames([{raw,S:parseSummary(raw)}]); play(games[0],L);
+    }catch(e){console.error(e);showSetup();$("err").textContent="Ce lien de partage est invalide ou incomplet."}
   }
   function setupGame(){
-    $("setup").hidden=true;$("game").hidden=false;$("newGame").hidden=false;
+    $("setup").hidden=true;$("game").hidden=false;$("newGame").hidden=false;$("share").hidden=false;
     SIDES.forEach(s=>{
       const tm=G.team[s], cap=s==="away"?"Away":"Home";
       $("n"+cap).textContent=tm.name; $("c"+cap).style.background=luminance(tm.c1)<0.03?tm.c2:tm.c1;
@@ -43,13 +83,14 @@ function initUI(){
     const sc=$("scrub"); sc.max=Math.ceil(G.T); sc.value=0;
     const mk=$("marks"); mk.innerHTML="";
     const addMk=(t,cls,color,title)=>{const d=document.createElement("span");d.className="mk "+cls;d.style.left=(t/G.T*100)+"%";if(color)d.style.background=color;if(title)d.title=title;mk.appendChild(d)};
-    [1200,2400,3600].forEach(x=>{if(x<G.T)addMk(x,"per")});
+    for(let x=1200;x<G.T;x+=1200) addMk(x,"per");
     G.pens.forEach(p=>addMk(p.t,"pen"));
     G.goals.forEach(gg=>addMk(gg.t,"goal",dotColor(G,gg.side)));
     const d=SIDES.map(s=>{const q=G.diag[s];const nm=G.team[s].name;
       if(!q.hasTeam) return nm+" : trios introuvables, alignement bâti selon le temps de glace";
       return nm+" : "+q.fromLines+" joueur"+(q.fromLines>1?"s":"")+" sur "+q.total+" placés selon les trios, les autres selon le temps de glace";});
-    $("diag").textContent=d.join(". ")+".";
+    $("diag").textContent=d.join(". ")+"."+skippedNote;
+    $("bsBody").innerHTML=boxScore();
     renderer.resize(); posMap=new Map(); lastFeedCount=-1; lastSecond=-1; freezeUntil=0; bannerSticky=false; hideBanner(); $("toast").hidden=true;
     seek(0); playing=false; updatePlayIcon();
   }
@@ -70,7 +111,7 @@ function initUI(){
   });
   function togglePlay(){if(!G)return;if(g>=G.T-0.01){seek(0)}playing=!playing;freezeUntil=0;if(playing&&!bannerSticky)hideBanner();updatePlayIcon()}
   function updatePlayIcon(){$("playIcon").innerHTML=playing?'<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>':'<path d="M7 4v16l13-8z"/>';$("bPlay").setAttribute("aria-label",playing?"Pause":"Lecture")}
-  function seek(t){g=clamp(t,0,G.T);freezeUntil=0;litUntil={away:0,home:0};bannerSticky=false;hideBanner();$("toast").hidden=true;posMap=new Map();stepPositions(1e9);if(g>=G.T-0.01)showFinal();updateUI(true);draw()}
+  function seek(t){g=clamp(t,0,G.T);hitFx=[];freezeUntil=0;litUntil={away:0,home:0};bannerSticky=false;hideBanner();$("toast").hidden=true;posMap=new Map();stepPositions(1e9);if(g>=G.T-0.01)showFinal();updateUI(true);draw()}
 
   function frame(now){
     const dtR=lastNow?Math.min(0.1,(now-lastNow)/1000):0; lastNow=now;
@@ -79,21 +120,24 @@ function initUI(){
       if(playing&&now>=freezeUntil){
         let ng=g+dtR*speed;
         const crossed=G.stops.filter(s=>s.t>g&&s.t<=ng);
-        const hard=crossed.find(s=>s.type!=="pen");
-        crossed.filter(s=>s.type==="pen"&&(!hard||s.t<=hard.t)).forEach(s=>showToast(s.p));
+        const hard=crossed.find(s=>!SOFT.has(s.type));
+        crossed.filter(s=>SOFT.has(s.type)&&(!hard||s.t<=hard.t)).forEach(s=>showToast(s));
         if(hard){ng=hard.t;triggerStop(hard,now)}
         if(ng>=G.T){ng=G.T;playing=false;updatePlayIcon();showFinal()}
+        if(!reduceMotion) G.hits.forEach(h=>{if(h.t>g&&h.t<=ng)hitFx.push({h,until:now+700})});
         dtG=ng-g; g=ng;
       }
       stepPositions(dtG);
       if(now>bannerUntil&&!bannerSticky) hideBanner();
       if(now>toastUntil) $("toast").hidden=true;
+      if(hitFx.length) hitFx=hitFx.filter(f=>f.until>now);
       SIDES.forEach(s=>{const el=$(s==="away"?"scAway":"scHome");el.classList.toggle("lit",now<litUntil[s])});
       updateUI(false); draw(now);
     }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  openShared(); window.addEventListener("hashchange",openShared);
 
   function triggerStop(s,now){
     if(s.type==="goal"){
@@ -101,22 +145,59 @@ function initUI(){
       const gg=s.g; const tm=G.team[gg.side];
       const ast=gg.assists.length?"Aides : "+gg.assists.map(p=>p.name).join(", "):"Sans aide";
       const tags=[]; if(gg.ppGoal||/PP/.test(gg.tag))tags.push("en avantage numérique"); if(/SH/.test(gg.tag))tags.push("en désavantage numérique"); if(/EN/.test(gg.tag))tags.push("dans un filet désert");
-      showBanner(`<div class="big goal">But ${esc2(tm.abbr)} !</div><div class="mid">${esc2(gg.scorer?gg.scorer.name:"")}</div><div class="small">${esc2(ast)}</div><div class="small">${PER_SHORT[gg.per-1]} ${gg.per===4?"":"période "}à ${fmt(gg.sec)}${tags.length?", "+tags.join(", "):""}</div>`);
+      const after=scoreAt(gg.t+0.001);
+      announce(`But ${tm.name}, ${gg.scorer?gg.scorer.name:""}. ${ast}. ${G.team.away.name} ${after.away}, ${G.team.home.name} ${after.home}.`);
+      showBanner(`<div class="big goal">But ${esc2(tm.abbr)} !</div><div class="mid">${esc2(gg.scorer?gg.scorer.name:"")}</div><div class="small">${esc2(ast)}</div><div class="small">${perShort(gg.per,G.nPer)} ${gg.per>=4?"":"période "}à ${fmt(gg.sec)}${tags.length?", "+tags.join(", "):""}</div>`);
     } else if(s.type==="end"){
       freezeUntil=now+1700; bannerUntil=now+1700;
       const sc=scoreAt(s.t+0.001);
-      showBanner(`<div class="big">Fin de la ${PER_NAMES[s.per-1]}</div><div class="small">${esc2(G.team.away.abbr)} ${sc.away}, ${esc2(G.team.home.abbr)} ${sc.home}</div>`);
+      announce(`Fin de la ${perName(s.per,G.nPer)}. ${G.team.away.name} ${sc.away}, ${G.team.home.name} ${sc.home}.`);
+      showBanner(`<div class="big">Fin de la ${perName(s.per,G.nPer)}</div><div class="small">${esc2(G.team.away.abbr)} ${sc.away}, ${esc2(G.team.home.abbr)} ${sc.home}</div>`);
     }
   }
-  function showToast(p){const el=$("toast");el.textContent="Pénalité : "+(p.p?p.p.name:"")+" ("+G.team[p.side].abbr+"), "+p.inf.toLowerCase()+", "+p.label;el.hidden=false;toastUntil=performance.now()+2600}
+  // Événements qui n'arrêtent pas la lecture : un bandeau en bas de la patinoire
+  const SOFT=new Set(["pen","pull","goalie"]);
+  function softText(s){
+    if(s.type==="pen"){const p=s.p;return "Pénalité : "+(p.p?p.p.name:"")+" ("+G.team[p.side].abbr+"), "+p.inf.toLowerCase()+", "+p.label}
+    if(s.type==="pull") return "Filet désert : "+G.team[s.side].abbr+" retire son gardien";
+    return "Changement de gardien "+G.team[s.side].abbr+" : "+s.in.name+" remplace "+s.out.name;
+  }
+  function showToast(s){showToastText(softText(s))}
+  function showToastText(text){const el=$("toast");el.textContent=text;el.hidden=false;toastUntil=performance.now()+2600;announce(text)}
+  // annonces pour les lecteurs d'écran
+  function announce(text){$("live").textContent=text}
   function showBanner(html){const b=$("banner");b.innerHTML=html;b.hidden=false}
   function hideBanner(){$("banner").hidden=true}
   function showFinal(){
     const sc=scoreAt(G.T+1); const ot=G.T>3600;
+    announce(`Final${ot?" en prolongation":""} : ${G.team.away.name} ${sc.away}, ${G.team.home.name} ${sc.home}${sc.away===sc.home?", match nul":""}.`);
     const stars=G.S.stars.slice(0,3).map(s=>`<li>${"★".repeat(4-s.n)} ${esc2(s.name)} (${esc2(s.abbr)})</li>`).join("");
-    showBanner(`<div class="big">Final${ot?" (prol.)":""}</div><div class="mid">${esc2(G.team.away.name)} ${sc.away}, ${esc2(G.team.home.name)} ${sc.home}</div>${stars?`<ul class="stars">${stars}</ul>`:""}${G.S.attendance?`<div class="small">Assistance : ${esc2(G.S.attendance)}</div>`:""}`);
+    showBanner(`<div class="big">Final${ot?" ("+finalOT()+")":""}</div><div class="mid">${esc2(G.team.away.name)} ${sc.away}, ${esc2(G.team.home.name)} ${sc.home}</div>${sc.away===sc.home?`<div class="small">Match nul</div>`:""}${stars?`<ul class="stars">${stars}</ul>`:""}${G.S.attendance?`<div class="small">Assistance : ${esc2(G.S.attendance)}</div>`:""}`);
     bannerSticky=true;
   }
+  /* Feuille de match */
+  const DEC_FR={W:"victoire",L:"défaite",T:"match nul",O:"défaite en prolongation"};
+  function boxScore(){
+    const pers=[1,2,3].concat(G.hasOT?[4]:[]);
+    const head=`<tr><th></th>${pers.map(p=>`<th>${p<4?p:"Prol."}</th>`).join("")}<th>T</th></tr>`;
+    const byPer=(list,side)=>{const n=pers.map(p=>list.filter(x=>x.side===side&&Math.min(4,x.per||(x.goal&&x.goal.per)||Math.floor(x.t/1200)+1)===p).length);
+      return n.map(v=>`<td>${v}</td>`).join("")+`<td class="tot">${n.reduce((a,b)=>a+b,0)}</td>`};
+    const tbl=(title,list)=>`<h4>${title}</h4><div class="tw"><table>${head}${SIDES.map(s=>`<tr><td>${esc2(G.team[s].name)}</td>${byPer(list,s)}</tr>`).join("")}</table></div>`;
+    const pp=SIDES.map(s=>{const v=G.S.pp[G.S[s]];return v?`${esc2(G.team[s].abbr)} : ${v.g} en ${v.n}`:null}).filter(Boolean);
+    const goalies=G.S.goalies.map(q=>{const pct=q.shots?(q.saves/q.shots*100).toFixed(1).replace(".",","):"";
+      return `<tr><td>${esc2(q.name)} (${esc2(q.abbr)})</td><td>${q.saves}</td><td>${q.shots}</td><td>${pct?pct+" %":""}</td><td>${DEC_FR[q.dec]||""}</td></tr>`}).join("");
+    const pm=v=>v>0?"+"+v:String(v);
+    const players=SIDES.map(s=>{
+      const rows=G.roster[s].filter(p=>!p.ghost&&(p.it>0||p.p||p.pim||p.s)).map(p=>`<tr><td>${esc2(p.name)}</td><td>${p.g}</td><td>${p.a}</td><td>${p.p}</td><td>${pm(p.pm)}</td><td>${p.pim}</td><td>${p.s}</td><td>${p.ht}</td><td>${p.it}</td></tr>`).join("");
+      return `<div><h4><span class="dot" style="background:${dotColor(G,s)}"></span>${esc2(G.team[s].name)}</h4><div class="tw"><table><tr><th>Joueur</th><th>B</th><th>A</th><th>PTS</th><th>+/-</th><th>PUN</th><th>T</th><th>MÉ</th><th>TG</th></tr>${rows}</table></div></div>`;
+    }).join("");
+    return `<div class="bsgrid"><div>${tbl("Buts",G.goals)}</div><div>${tbl("Tirs",G.shots)}</div></div>`
+      +(pp.length?`<h4>Avantages numériques</h4><p>${pp.join(", ")}</p>`:"")
+      +(goalies?`<h4>Gardiens</h4><div class="tw"><table><tr><th>Gardien</th><th>Arrêts</th><th>Tirs</th><th>%</th><th>Décision</th></tr>${goalies}</table></div>`:"")
+      +`<div class="bsgrid">${players}</div>`
+      +`<p class="legend">B : buts, A : aides, PTS : points, PUN : minutes de pénalité, T : tirs, MÉ : mises en échec, TG : temps de glace (min).</p>`;
+  }
+  function finalOT(){return G.nPer>4?perShort(G.nPer,G.nPer):"prol."}
   function esc2(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
   function scoreAt(t){const o={away:0,home:0};G.goals.forEach(x=>{if(x.t<=t)o[x.side]++});return o}
 
@@ -139,11 +220,13 @@ function initUI(){
     const sec=Math.floor(g*2)/2;
     if(!force&&sec===lastSecond) return; lastSecond=sec;
     $("scrub").value=Math.round(g);
-    let per=g>=3600?4:Math.floor(g/1200)+1, rem;
-    if(g>0&&g<=3600&&Math.abs(g%1200)<1e-6){per=Math.round(g/1200);rem=0}
-    else rem=(per<4?per*1200:4800)-g;
-    if(g>=G.T-0.001&&G.T>3600){per=4;rem=4800-G.T}
-    $("per").textContent=PER_NAMES[per-1]; $("clock").textContent=fmtClock(rem);
+    const nP=G.nPer;
+    let per=Math.min(Math.floor(g/1200)+1,nP), rem;
+    if(g>0&&g<=nP*1200&&Math.abs(g%1200)<1e-6){per=Math.round(g/1200);rem=0}
+    else rem=per*1200-g;
+    if(g>=G.T-0.001&&G.T>3600){per=nP;rem=nP*1200-G.T}
+    $("per").textContent=perName(per,nP); $("clock").textContent=fmtClock(rem);
+    $("scrub").setAttribute("aria-valuetext",perName(per,nP)+", "+fmtClock(rem));
     const sc=scoreAt(g+0.0001);
     $("scAway").textContent=sc.away; $("scHome").textContent=sc.home;
     const sh={away:0,home:0}; G.shots.forEach(s=>{if(s.t<=g)sh[s.side]++});
@@ -155,31 +238,40 @@ function initUI(){
       const act=G.pens.filter(p=>p.side===pkS&&p.strength&&p.t<=g&&g<p.end).sort((a,b)=>a.end-b.end);
       strTxt="Avantage numérique "+G.team[pp].abbr+(act.length?" "+fmtClock(act[0].end-g):"")+(st[pp].n-st[pkS].n>1?" (5 c. 3)":"");
     } else if(st.away.n<5) strTxt=st.away.n+" contre "+st.home.n;
-    $("strength").textContent=strTxt;
+    const pulled=SIDES.filter(s=>st[s].pulled).map(s=>"Filet désert "+G.team[s].abbr);
+    $("strength").textContent=[...pulled,strTxt].filter(Boolean).join(", ");
     // présences
     const seg=G.segAt(g);
     SIDES.forEach(s=>{
       const el=$(s==="away"?"oiAway":"oiHome"); const tm=G.team[s];
       const k=seg.state[s].kind; const lab=k==="PP"?"Avantage numérique":k==="PK"?"Désavantage numérique":(seg.state[s].n<5?seg.state[s].n+" contre "+seg.state[s].n:"Forces égales");
-      const rows=seg.line[s].map(e=>`<li><span class="role">${ROLE_FR[e.role]}</span><span>${esc2(e.p.name)}</span></li>`).join("")+`<li><span class="role">G</span><span>${esc2(G.goalie[s].name)}</span></li>`;
+      const gk=G.goalieAt(s,g), out=G.pulledAt(s,g);
+      const rows=seg.line[s].map(e=>`<li><span class="role">${ROLE_FR[e.role]}</span><span>${esc2(e.p.name)}${e.role==="X"?" (6e attaquant)":""}</span></li>`).join("")+`<li><span class="role">G</span><span>${out?"Filet désert ("+esc2(gk.name)+" au banc)":esc2(gk.name)}</span></li>`;
       const bx=[...G.boxedAt(s,g)].map(p=>esc2(p.name)).join(", ");
       el.innerHTML=`<h4><span class="dot" style="background:${dotColor(G,s)}"></span>${esc2(tm.name)}</h4><div class="st">${lab}</div><ul>${rows}</ul>${bx?`<div class="box">Au banc des pénalités : ${bx}</div>`:""}`;
     });
+    $("boxscore").hidden=g<G.T-0.01;
     // déroulement
     const evs=G.events.filter(e=>e.t<=g+0.0001&&!(e.type==="final"&&g<G.T-0.01));
     if(evs.length!==lastFeedCount){
       lastFeedCount=evs.length; const f=$("feed");
       if(!evs.length){f.innerHTML='<li class="empty">Mise au jeu initiale. Appuyez sur lecture.</li>';return}
       f.innerHTML=evs.slice().reverse().map(e=>{
-        const when=e.type==="final"?"":(PER_SHORT[(e.type==="end"?e.per:(e.g||e.p).per)-1]+" "+(e.type==="end"?"":fmt((e.g||e.p).sec)));
+        const src=e.g||e.p||e;
+        const when=e.type==="final"?"":(perShort(src.per,G.nPer)+" "+(e.type==="end"?"":fmt(src.sec)));
         let body="";
         if(e.type==="goal"){const x=e.g;body=`<span class="goal"><span class="tag" style="background:${dotColor(G,x.side)}"></span>But ${esc2(G.team[x.side].abbr)} : ${esc2(x.scorer?x.scorer.name:"")}</span>${x.assists.length?" ("+x.assists.map(p=>esc2(p.name)).join(", ")+")":" (sans aide)"}${x.ppGoal?", AN":""}`}
         else if(e.type==="pen"){const p=e.p;body=`Pénalité ${esc2(G.team[p.side].abbr)} : ${esc2(p.p?p.p.name:"")}, ${esc2(p.inf.toLowerCase())}, ${esc2(p.label)}`}
-        else if(e.type==="end"){body=`Fin de la ${PER_NAMES[e.per-1]}`}
-        else {const s2=scoreAt(G.T+1);body=`<span class="goal">Final : ${esc2(G.team.away.abbr)} ${s2.away}, ${esc2(G.team.home.abbr)} ${s2.home}</span>`}
-        return `<li data-t="${e.t}"><span class="ft">${when}</span><span>${body}</span></li>`;
+        else if(e.type==="pull"||e.type==="goalie"){body=esc2(softText(e))}
+        else if(e.type==="end"){body=`Fin de la ${perName(e.per,G.nPer)}`}
+        else {const s2=scoreAt(G.T+1);body=`<span class="goal">Final${G.T>3600?" ("+finalOT()+")":""} : ${esc2(G.team.away.abbr)} ${s2.away}, ${esc2(G.team.home.abbr)} ${s2.home}${s2.away===s2.home?", match nul":""}</span>`}
+        return `<li data-t="${e.t}" tabindex="0" role="button"><span class="ft">${when}</span><span>${body}</span></li>`;
       }).join("");
-      f.querySelectorAll("li[data-t]").forEach(li=>li.onclick=()=>{const t=+li.dataset.t;seek(Math.max(0,t-8))});
+      f.querySelectorAll("li[data-t]").forEach(li=>{
+        const go=()=>seek(Math.max(0,+li.dataset.t-8));
+        li.onclick=go;
+        li.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();go()}};
+      });
     }
   }
 }

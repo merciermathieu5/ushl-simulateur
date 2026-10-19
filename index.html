@@ -16,7 +16,10 @@
       <svg class="puck" viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="20" rx="13" ry="6" fill="var(--ink)"/><rect x="3" y="13" width="26" height="7" fill="var(--ink)"/><ellipse cx="16" cy="13" rx="13" ry="6" fill="var(--muted)"/></svg>
       <div><h1>Simulateur de match</h1><div class="sub">Ligue USHL, moteur FHL</div></div>
     </div>
-    <button class="btn" id="newGame" hidden>Nouveau match</button>
+    <div class="topbtns">
+      <button class="btn" id="share" hidden>Copier le lien</button>
+      <button class="btn" id="newGame" hidden>Nouveau match</button>
+    </div>
   </header>
 
   <section id="setup" class="setup">
@@ -26,7 +29,7 @@
       <label class="field">
         <span class="flabel">Sommaire du match</span>
         <textarea id="sumIn" spellcheck="false" placeholder="NEWJERSEY at TORONTO&#10;Shots ...&#10;Scoring Summary ..."></textarea>
-        <span class="hint">Sélectionnez toute la page du sommaire (Ctrl+A), copiez, puis collez ici.</span>
+        <span class="hint">Sélectionnez toute la page du sommaire (Ctrl+A), copiez, puis collez ici. Vous pouvez coller plusieurs sommaires à la suite.</span>
       </label>
       <label class="field">
         <span class="flabel">Trios de la ligue <small id="linesNote"></small></span>
@@ -38,18 +41,21 @@
       <button class="btn primary" id="go">Lancer le match</button>
       <button class="btn" id="example">Charger l’exemple</button>
       <button class="btn" id="clearLines">Vider les trios</button>
+      <button class="btn" id="snapLines">Revenir à l’instantané</button>
     </div>
     <p id="err" class="err" role="alert"></p>
   </section>
 
   <section id="game" hidden>
+    <div id="live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+    <div class="gamebar" id="gameBar" hidden><label class="ctl">Match <select id="gamePick"></select></label></div>
     <div class="board" aria-live="off">
       <div class="tm away"><span class="chip" id="cAway"></span><div class="info"><div class="tname" id="nAway"></div><div class="tside" id="sAway"></div></div><div class="tscore" id="scAway">0</div></div>
       <div class="clockbox"><div class="per" id="per"></div><div class="clock" id="clock">20:00</div><div class="strength" id="strength"></div></div>
       <div class="tm home"><span class="chip" id="cHome"></span><div class="info"><div class="tname" id="nHome"></div><div class="tside" id="sHome"></div></div><div class="tscore" id="scHome">0</div></div>
     </div>
     <div class="stage">
-      <canvas id="rink" aria-label="Patinoire animée"></canvas>
+      <canvas id="rink" role="img" aria-label="Patinoire animée"></canvas>
       <div id="banner" class="banner" hidden></div>
       <div id="toast" class="toast" hidden></div>
     </div>
@@ -78,6 +84,10 @@
         <ol class="feed" id="feed"></ol>
       </section>
     </div>
+    <section class="panel bs" id="boxscore" hidden>
+      <h3>Feuille de match</h3>
+      <div id="bsBody"></div>
+    </section>
   </section>
 </div>
 
@@ -87,6 +97,7 @@
 <script src="js/parser.js"></script>
 <script src="js/game.js"></script>
 <script src="js/renderer.js"></script>
+<script src="js/share.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>

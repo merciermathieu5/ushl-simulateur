@@ -22,7 +22,13 @@ const FALLBACK_COLORS = ["#7A1F5C","#0B6E4F","#8C3B00","#2F3E9E","#5B5F00","#7B2
 const SIDES = ["away","home"];
 const PER_NAMES = ["1re période","2e période","3e période","Prolongation"];
 const PER_SHORT = ["1re","2e","3e","Prol."];
-const ROLE_FR = {C:"C",LW:"AG",RW:"AD",W:"A",LD:"D",RD:"D",G:"G"};
+// En saison : une prolongation. En séries : autant qu'il faut, numérotées.
+const ordFr = n => n===1?"1re":n+"e";
+function perName(per,nPer){return per<=3||nPer<=4?PER_NAMES[Math.min(per,4)-1]:ordFr(per-3)+" prolongation"}
+function perShort(per,nPer){return per<=3||nPer<=4?PER_SHORT[Math.min(per,4)-1]:ordFr(per-3)+" prol."}
+const ROLE_FR = {C:"C",LW:"AG",RW:"AD",W:"A",LD:"D",RD:"D",G:"G",X:"A"};
+// Bancs des joueurs, en coordonnées de patinoire (hors glace, en haut)
+const BENCH={away:{x:24,y:-50},home:{x:-24,y:-50}};
 const INFR = [[/GOALIE\s*INTER/i,"Obstruction sur le gardien"],[/ELBOW/i,"Coup de coude"],[/ROUGH/i,"Rudesse"],[/CHARG/i,"Charge"],
   [/HOOK/i,"Accrochage"],[/TRIP/i,"Faire trébucher"],[/SLASH/i,"Cinglage"],[/HIGH.?STICK/i,"Bâton élevé"],[/CROSS.?CHECK/i,"Double-échec"],
   [/FROM BEHIND/i,"Mise en échec par derrière"],[/BOARD/i,"Mise en échec contre la bande"],[/HOLDING THE STICK/i,"Retenir le bâton"],[/HOLD/i,"Retenue"],

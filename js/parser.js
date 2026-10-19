@@ -55,11 +55,24 @@ function parseLines(raw){
 }
 
 /* ---------- Analyse du sommaire ---------- */
+const GAME_HEADER=/^([A-Za-z][A-Za-z.]+)\s+(?:at|@|à|vs\.?)\s+([A-Za-z][A-Za-z.]+)$/;
+// Plusieurs sommaires collés à la suite : un morceau par match (pages HTML ou en-têtes « ÉQUIPE at ÉQUIPE »).
+function splitGames(raw){
+  const html=[...raw.matchAll(/<HTML\b/gi)].map(m=>m.index);
+  let parts;
+  if(html.length>1) parts=html.map((p,i)=>raw.slice(i?p:0,html[i+1]));
+  else{
+    const lines=raw.split("\n"), idx=lines.map((l,i)=>GAME_HEADER.test(l.trim())?i:-1).filter(i=>i>=0);
+    if(idx.length<2) return [raw];
+    parts=idx.map((p,i)=>lines.slice(i?p:0,idx[i+1]).join("\n"));
+  }
+  return parts.filter(p=>p.trim());
+}
 function parseSummary(raw){
   const text=htmlToText(raw).replace(/\r/g,"").replace(/\u00a0/g," ");
   const lines=text.split("\n");
-  const S={away:null,home:null,shotRows:{},goals:[],pens:[],goalies:[],players:{away:[],home:[]},stars:[],attendance:null};
-  for(const l of lines){const m=l.trim().match(/^([A-Za-z][A-Za-z.]+)\s+(?:at|@|à|vs\.?)\s+([A-Za-z][A-Za-z.]+)$/);if(m){S.away=m[1].toUpperCase();S.home=m[2].toUpperCase();break}}
+  const S={away:null,home:null,shotRows:{},goals:[],pens:[],goalies:[],players:{away:[],home:[]},stars:[],pp:{},attendance:null};
+  for(const l of lines){const m=l.trim().match(GAME_HEADER);if(m){S.away=m[1].toUpperCase();S.home=m[2].toUpperCase();break}}
   if(!S.away) throw new Error("Je ne trouve pas la ligne « ÉQUIPE at ÉQUIPE » au début du sommaire. Vérifiez que tout le sommaire a été copié.");
   for(const side of SIDES){
     const re=new RegExp(esc(S[side])+"\\s+((?:\\d+\\s+){2,}\\d+)","g");const rows=[];
@@ -81,7 +94,9 @@ function parseSummary(raw){
     if(up===S.away||up===S.home){cur=up===S.away?"away":"home";continue}
     if(sec==="score"){
       const pm=t.match(/^Period\s+(\d+)/i); if(pm){per=+pm[1];continue}
-      if(/^(Overtime|OT\b|Prolongation)/i.test(t)){per=4;continue}
+      // « Overtime », « Overtime 2 », « 2nd Overtime », « Double Overtime »... ou un nouvel en-tête « Overtime »
+      const om=t.match(/^(?:(\d+)\s*(?:st|nd|rd|th|re|e)?\s+|(double|triple|quadruple)\s+)?(?:Overtime|OT\b|Prolongation)\s*#?(\d+)?/i);
+      if(om){const n=om[1]||om[3]||(om[2]&&{double:2,triple:3,quadruple:4}[om[2].toLowerCase()]);per=n?3+(+n):Math.max(4,per+1);continue}
       if(/PENALT/i.test(t)){parsePens(t,per,S);continue}
       const gm=t.match(/^\d+\.\s*([^,]+?)\s*,\s*(.+)$/); if(gm) parseGoal(gm,per,S);
       continue;
@@ -89,6 +104,11 @@ function parseSummary(raw){
     if(sec==="goalie"){
       const m=t.match(/^(.+?)\s*\(\s*([A-Za-z.]{1,4})\s*\)\s*,\s*(\d+)\s+saves?\s+out\s+of\s+(\d+)\s+shots?(?:\s*,\s*([A-Z]))?/i);
       if(m) S.goalies.push({name:m[1].trim(),abbr:m[2].toUpperCase(),saves:+m[3],shots:+m[4],dec:m[5]||""});
+      continue;
+    }
+    if(sec==="pp"){
+      const m=t.match(/^([A-Za-z][A-Za-z.]+)\s+(\d+)\s+(?:for|en|sur)\s+(\d+)/i);
+      if(m) S.pp[m[1].toUpperCase()]={g:+m[2],n:+m[3]};
       continue;
     }
     if(sec==="stars"){
@@ -127,4 +147,13 @@ function parsePens(t,per,S){
     const sec=(+m[5])*60+(+m[6]);
     S.pens.push({per,sec,t:(per-1)*1200+sec,name:m[1].trim(),abbr:m[2],inf:m[3].trim(),kind:(m[4]||"Minor").trim()});
   }
+}
+
+/* ---------- Date « As of » de la page des trios ---------- */
+const MONTHS={JAN:0,FEB:1,FEV:1,MAR:2,APR:3,AVR:3,MAY:4,MAI:4,JUN:5,JUL:6,AUG:7,AOU:7,SEP:8,OCT:9,NOV:10,DEC:11};
+function linesDate(raw){
+  const m=(raw||"").match(/As of\s+(?:[^\s,()]+,\s*)?([^\s\d,()]+)\s+(\d{1,2}),?\s+(\d{4})/i);
+  if(!m) return null;
+  const mo=norm(m[1]); const i=mo.startsWith("JUI")?{N:5,L:6}[mo[3]]:MONTHS[mo.slice(0,3)];
+  return i===undefined?null:new Date(+m[3],i,+m[2]).getTime();
 }

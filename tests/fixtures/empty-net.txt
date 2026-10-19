@@ -1,0 +1,102 @@
+
+NEWJERSEY at TORONTO
+
+ Shots
+
+	1	2	3	OT	T
+
+NEWJERSEY 	 7	 12	 9	 0	 28
+
+TORONTO   	 12	 13	 11	 0	 36
+
+		 Goals
+
+	1	2	3	OT	T
+
+NEWJERSEY 	 0	 1	 1	 0	 2
+
+TORONTO   	 0	 3	 1	 0	 4
+
+ Scoring Summary
+
+ Period 1
+ NO SCORING
+
+ Period 2
+ 1. TORONTO, BEDARD 1 (HAYTON), 02:00
+ 2. NEWJERSEY, GREIG 1 (LYUBUSHKIN, STRUBLE), 03:07
+ 3. TORONTO, RODRIGUES 1 (PALAT, MIROSHNICHENKO), 06:00
+ 4. TORONTO, HAYTON 1 (BEDARD, NURSE), 09:30
+
+ Period 3
+ 5. NEWJERSEY, KAPRIZOV 1 (FROST, TKACHUK), 12:00
+ 6. TORONTO, ZADINA 1 (NURSE), 19:12 (EN)
+ PENALTIES: J. FARABEE NJ  (CHARGING, Minor) 09:28
+
+Goalie Statistics
+ Jacob Markstrom (NJ ), 12 saves out of 15 shots,  L, 1-1-0
+ Jake Allen (NJ ), 20 saves out of 20 shots,  , 0-0-0
+ Chris Gibson (TOR), 26 saves out of 28 shots,  W, 2-0-0
+
+Power Play Conversions
+ NEWJERSEY  0 for 4
+ TORONTO  0 for 1
+
+Game Stars
+  1 - Chris Gibson (TOR)
+  2 - Filip Zadina (TOR)
+  3 - Jacob Markstrom (NJ )
+
+Player Statistics
+
+  NEWJERSEY
+
+                      G  A  P   +/- PIM  S  HT IT
+-------------------------------------------------
+Frank Nazar           0  0  0  Even   0  1   0  5
+Brayden McNabb        0  0  0    -1   0  1   1 24
+Joel Farabee          0  0  0    -1   2  3   0 29
+Morgan Frost          0  0  0  Even   0  2   3 24
+Aaron Ekblad          0  0  0  Even   0  1   3 27
+Marcus Foligno        0  0  0  Even   0  2   0 11
+Kirill Kaprizov       0  0  0  Even   0  3   3 28
+Dante Fabbro          0  0  0  Even   0  1   1 27
+Lias Andersson        0  0  0  Even   0  2   4 25
+Jakub Lauko           0  0  0  Even   0  0   0  1
+Ilya Lyubushkin       0  1  1  Even   0  0   1 13
+Matthew Tkachuk       0  0  0    -1   0  2   8 29
+Nick Paul             0  0  0  Even   0  0   4 19
+Ridly Greig           1  0  1  Even   0  1   5 15
+Jayden Struble        0  1  1  Even   0  1   1 11
+Cole Sillinger        0  0  0    -1   0  1   1 27
+Luke Tuch             0  0  0  Even   0  0   1  5
+Noah Juulsen          0  0  0    -1   0  3   1 31
+
+	  TORONTO
+
+                      G  A  P   +/- PIM  S  HT IT
+-------------------------------------------------
+Ivan Miroshnichenko   0  1  1    +1   0  1   2 17
+Matvei Michkov        0  1  1    +1   0  3   0 22
+Chris Bigras          0  0  0  Even   0  2   7 33
+Darnell Nurse         0  1  1    +1   2  0   6 25
+Filip Zadina          1  0  1    +1   2  3   4 31
+Lian Bichsel          0  0  0  Even   0  0   3 18
+Vassili Zaitsev       0  0  0  Even   0  4   2 21
+Tyson Jost            0  0  0  Even   2  2   3 26
+Rasmus Ristolainen    0  0  0  Even   0  2   6 18
+Travis Sanheim        0  0  0  Even   0  4   6 28
+Lawson Crouse         0  0  0  Even   0  0   0  0
+Evan Rodrigues        1  0  1    +1   0  1   3 19
+Barrett Hayton        0  0  0  Even   0  4   2 28
+Ondrej Palat          0  1  1  Even   0  1   4 15
+Connor Bedard         0  0  0  Even   0  4   2 23
+Ryan Merkley          0  0  0  Even   2  4   0 21
+Paul Cotter           0  0  0  Even   0  0   0  0
+Eamon Powell          0  0  0  Even   0  0   0  0
+
+Financial
+ Attendance: 16989
+ Net Profit: $3 465 756,00
+
+Game Notes
