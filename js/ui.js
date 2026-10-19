@@ -21,9 +21,9 @@ function initUI(){
   $("go").onclick=start;
   $("newGame").onclick=()=>{playing=false;updatePlayIcon();$("game").hidden=true;$("setup").hidden=false;$("newGame").hidden=true;window.scrollTo(0,0)};
 
-  let G=null, g=0, playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
+  let G=null, g=0, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedCount=-1, lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
   const renderer=createRenderer($("rink"));
-  const draw=()=>renderer.draw({G,g,posMap,current,freezeUntil,showNames:$("showNames").checked});
+  const draw=()=>renderer.draw({G,g,posMap,current,freezeUntil,hitFx,showNames:$("showNames").checked});
   window.addEventListener("resize",()=>{if(G){renderer.resize();draw()}});
   if(window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{renderer.readTheme();if(G)draw()});
   renderer.readTheme();
@@ -78,7 +78,7 @@ function initUI(){
   });
   function togglePlay(){if(!G)return;if(g>=G.T-0.01){seek(0)}playing=!playing;freezeUntil=0;if(playing&&!bannerSticky)hideBanner();updatePlayIcon()}
   function updatePlayIcon(){$("playIcon").innerHTML=playing?'<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>':'<path d="M7 4v16l13-8z"/>';$("bPlay").setAttribute("aria-label",playing?"Pause":"Lecture")}
-  function seek(t){g=clamp(t,0,G.T);freezeUntil=0;litUntil={away:0,home:0};bannerSticky=false;hideBanner();$("toast").hidden=true;posMap=new Map();stepPositions(1e9);if(g>=G.T-0.01)showFinal();updateUI(true);draw()}
+  function seek(t){g=clamp(t,0,G.T);hitFx=[];freezeUntil=0;litUntil={away:0,home:0};bannerSticky=false;hideBanner();$("toast").hidden=true;posMap=new Map();stepPositions(1e9);if(g>=G.T-0.01)showFinal();updateUI(true);draw()}
 
   function frame(now){
     const dtR=lastNow?Math.min(0.1,(now-lastNow)/1000):0; lastNow=now;
@@ -91,11 +91,13 @@ function initUI(){
         crossed.filter(s=>SOFT.has(s.type)&&(!hard||s.t<=hard.t)).forEach(s=>showToast(s));
         if(hard){ng=hard.t;triggerStop(hard,now)}
         if(ng>=G.T){ng=G.T;playing=false;updatePlayIcon();showFinal()}
+        G.hits.forEach(h=>{if(h.t>g&&h.t<=ng)hitFx.push({h,until:now+700})});
         dtG=ng-g; g=ng;
       }
       stepPositions(dtG);
       if(now>bannerUntil&&!bannerSticky) hideBanner();
       if(now>toastUntil) $("toast").hidden=true;
+      if(hitFx.length) hitFx=hitFx.filter(f=>f.until>now);
       SIDES.forEach(s=>{const el=$(s==="away"?"scAway":"scHome");el.classList.toggle("lit",now<litUntil[s])});
       updateUI(false); draw(now);
     }

@@ -4,7 +4,7 @@
 function buildGame(S,L,seedText){
   const rng=mulberry32(hashStr(seedText||"x"));
   const R=()=>rng();
-  const G={S,team:{},roster:{},goalie:{},goalies:{},goalieSwap:{},pulls:[],units:{},grp:{},diag:{},goals:[],pens:[],shots:[],segs:[],kfs:[],events:[],stops:[]};
+  const G={S,team:{},roster:{},goalie:{},goalies:{},goalieSwap:{},pulls:[],hits:[],units:{},grp:{},diag:{},goals:[],pens:[],shots:[],segs:[],kfs:[],events:[],stops:[]};
   let pid=0;
   SIDES.forEach(side=>{
     G.team[side]=teamInfo(S[side]);
@@ -357,6 +357,26 @@ function buildGame(S,L,seedText){
   });
   kfs.sort((a,b)=>a.t-b.t);
 
+  // Mises en échec (colonne HT) : quand le joueur est sur la glace et que l'adversaire a la rondelle
+  const Rh=mulberry32(hashStr((seedText||"x")+"|mises"));
+  const busy=[...G.shots.map(s=>s.t),...G.pens.map(p=>p.t),...periods.map(p=>(p-1)*1200),G.T];
+  SIDES.forEach(side=>G.roster[side].forEach(p=>{
+    if(!p.ht) return;
+    const segs=G.segs.filter(sg=>sg.b-sg.a>6&&sg.line[side].some(e=>e.p===p));
+    const tot=segs.reduce((a,sg)=>a+sg.b-sg.a,0);
+    for(let i=0;i<p.ht&&segs.length;i++){
+      for(let tries=0;tries<40;tries++){
+        let r=Rh()*tot, sg=segs[segs.length-1];
+        for(const x of segs){r-=x.b-x.a;if(r<=0){sg=x;break}}
+        const t=sg.a+2+Rh()*(sg.b-sg.a-4);
+        if(busy.some(x=>Math.abs(x-t)<3)||G.hits.some(h=>Math.abs(h.t-t)<4)) continue;
+        if(tries<30&&puckAt(G,t).side!==other(side)) continue;
+        G.hits.push({t,side,p}); break;
+      }
+    }
+  }));
+  G.hits.sort((a,b)=>a.t-b.t);
+
   // Événements et arrêts
   G.goals.forEach(g=>{G.events.push({t:g.t,type:"goal",g});G.stops.push({t:g.t,type:"goal",g})});
   G.pens.forEach(p=>{G.events.push({t:p.t,type:"pen",p});G.stops.push({t:p.t,type:"pen",p})});
@@ -429,6 +449,16 @@ function targetsAt(G,t){
     const g=G.goalieAt(side,t);
     if(G.pulledAt(side,t)) out.push({p:g,role:"G",side,x:BENCH[side].x+11,y:BENCH[side].y});
     else out.push({p:g,role:"G",side,x:-dir*85.6,y:clamp(pk.y*0.12,-3,3)});
+  });
+  // le joueur qui frappe rejoint le porteur de la rondelle adverse
+  const HW=1.6;
+  G.hits.forEach(h=>{
+    const dt=t-h.t; if(dt<-HW||dt>HW) return;
+    const me=out.find(o=>o.p===h.p); if(!me) return;
+    const opp=out.filter(o=>o.side!==h.side&&o.role!=="G"); if(!opp.length) return;
+    const tg=opp.find(o=>o.carrier)||opp.reduce((a,o)=>Math.hypot(o.x-pk.x,o.y-pk.y)<Math.hypot(a.x-pk.x,a.y-pk.y)?o:a);
+    const w=1-Math.abs(dt)/HW, dir=G.attackDir(h.side,t);
+    me.x=lerp(me.x,tg.x-dir*2.4,w); me.y=lerp(me.y,tg.y,w);
   });
   return {list:out,puck:pk,seg};
 }

@@ -44,6 +44,15 @@ function createRenderer(canvas){
     items.forEach(it=>drawPlayer(c,it.x,it.y,it.o,showNames));
     // pénalisés
     SIDES.forEach(s=>{const bx=[...G.boxedAt(s,g)];bx.forEach((p,i)=>drawPlayer(c,PBX[s].x-(bx.length-1)*3.5+i*7,PBX[s].y,{p,side:s,role:p.grp==="D"?"LD":"C"},showNames,true))});
+    // mises en échec
+    const now=performance.now();
+    (view.hitFx||[]).forEach(f=>{
+      const k=(f.until-now)/700, pos=view.posMap.get(f.h.p.id); if(k<=0||!pos) return;
+      const px=X(pos.x),py=Y(pos.y),r0=Math.max(10,3.8*scale)*(1.9-k);
+      c.save();c.globalAlpha=k;c.strokeStyle="#FFB020";c.lineWidth=3;
+      for(let i=0;i<8;i++){const a=i*Math.PI/4+0.3;c.beginPath();c.moveTo(px+Math.cos(a)*r0*0.75,py+Math.sin(a)*r0*0.75);c.lineTo(px+Math.cos(a)*r0*1.25,py+Math.sin(a)*r0*1.25);c.stroke()}
+      c.restore();
+    });
     // rondelle
     const pk=current.puck; const pr=Math.max(3,0.95*scale);
     c.beginPath();c.arc(X(pk.x),Y(pk.y),pr+1.2,0,Math.PI*2);c.fillStyle="#FFFFFF";c.fill();

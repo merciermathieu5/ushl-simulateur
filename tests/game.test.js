@@ -113,3 +113,15 @@ test("changement de gardien à l'entracte quand le partant n'a rien accordé",()
   const G=build(raw);
   assert.strictEqual(G.goalieSwap.away,1200.01);
 });
+
+test("mises en échec : une par point de la colonne HT, joueur sur la glace",()=>{
+  const G=build(api.SAMPLE_SUMMARY);
+  const want=["away","home"].reduce((a,s)=>a+G.roster[s].reduce((b,p)=>b+p.ht,0),0);
+  assert.ok(G.hits.length>=want*0.95&&G.hits.length<=want,G.hits.length+" sur "+want);
+  G.hits.forEach(h=>assert.ok(G.segAt(h.t).line[h.side].some(e=>e.p===h.p)));
+  // le frappeur rejoint un adversaire au moment de la mise en échec
+  const h=G.hits[5], list=api.targetsAt(G,h.t).list;
+  const me=list.find(o=>o.p===h.p);
+  const d=Math.min(...list.filter(o=>o.side!==h.side).map(o=>Math.hypot(o.x-me.x,o.y-me.y)));
+  assert.ok(d<4,"distance "+d);
+});
