@@ -1,0 +1,80 @@
+name: Matchs de la ligue
+
+# Récupère les matchs simulés sur ushl.ca et les publie dans le simulateur, sans copier-coller.
+#
+# Le script ne fait que des requêtes conditionnelles (If-Modified-Since) : tant que la ligue ne
+# publie rien, ushl.ca répond « 304, rien de neuf » et rien n'est téléchargé ni commité.
+# Une simulation publiée est lue au plus tard une vingtaine de minutes après sa mise en ligne
+# (10 minutes d'attente pour laisser finir le téléversement, puis le passage suivant).
+#
+# Bouton « Run workflow » de l'onglet Actions : passage immédiat, par exemple juste après une simulation.
+# Le champ « archive » importe une fois les séries d'une saison archivée sur ushl.ca (ex. USHL21).
+on:
+  schedule:
+    - cron: '*/20 21-23,0-5 * * *'   # aux 20 minutes de 17 h à 2 h à Québec (16 h à 1 h en hiver)
+    - cron: '7 8,12,16 * * *'        # trois vérifications de jour, au cas où une simulation tomberait ailleurs
+  workflow_dispatch:
+    inputs:
+      archive:
+        description: "Importer les séries d'une saison archivée (ex. USHL21). Laisser vide pour un passage normal."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: matchs-de-la-ligue
+  cancel-in-progress: false
+
+jobs:
+  recuperer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # La branche telle qu'elle est au moment du passage (et non au moment où il a été mis en file) :
+      # un passage qui attendait derrière un autre part de ce que le précédent vient de publier.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Page de vérification anti-robot, site en panne ou qui ne répond plus : avertissement sans échec,
+      # ce qui a été récupéré est gardé et le passage suivant reprend le reste. Une page inattendue
+      # (format FHL changé, par exemple) met le passage en échec.
+      - name: Récupérer les nouveaux matchs
+        id: recup
+        env:
+          ARCHIVE: ${{ github.event.inputs.archive }}
+        run: |
+          if [ -n "$ARCHIVE" ]; then
+            node scripts/recuperer.js --archive "$ARCHIVE"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            node scripts/recuperer.js --saison-suivante --reessayer
+          else
+            node scripts/recuperer.js
+          fi
+
+      - name: Enregistrer les matchs
+        if: steps.recup.outputs.nouveau == 'true'
+        env:
+          RESUME: ${{ steps.recup.outputs.resume }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/auto
+          git commit -m "Matchs de la ligue : $RESUME"
+          git push || { git pull --rebase && git push; }
+
+      # Le commit du robot suffit d'habitude à republier GitHub Pages. Cette demande explicite
+      # couvre le cas contraire; un échec ici n'empêche rien.
+      - name: Republier le site
+        if: steps.recup.outputs.nouveau == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST "repos/${GITHUB_REPOSITORY}/pages/builds" --silent || echo "::notice::Demande de republication refusée; le commit déclenchera la publication."

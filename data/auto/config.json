@@ -1,0 +1,10 @@
+{
+  "base": "https://ushl.ca/ushl/menu_sim/USHL-pro/",
+  "archive": "https://ushl.ca/ushl/menu_archives/Pro/{saison}/Saison/",
+  "saison": "USHL22",
+  "types": ["saison", "series"],
+  "saisonSuivanteAuto": true,
+  "stabilisationMinutes": 10,
+  "maxParPassage": 150,
+  "essaisMax": 24
+}
