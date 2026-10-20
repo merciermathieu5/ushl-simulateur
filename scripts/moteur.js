@@ -8,7 +8,9 @@ function charger(root) {
   const src = FILES.map(f => fs.readFileSync(path.join(root, f), "utf8").replace(/^"use strict";/, "")).join("\n");
   const ctx = { console };
   vm.createContext(ctx);
-  vm.runInContext('"use strict";\n' + src + "\n;globalThis.__m={parseSummary,parseLines,buildGame};", ctx);
+  // Le tout dans une fonction, avec les objets globaux en variables locales : dans un contexte vm, chaque accès
+  // à une variable globale est lent, ce qui ralentirait beaucoup la simulation du match.
+  vm.runInContext('(function(){"use strict";const {Math,Infinity,NaN,Set,Map,Array,Object,Number,String,JSON,Float32Array,Float64Array,Error}=globalThis;\n' + src + "\n;globalThis.__m={parseSummary,parseLines,buildGame};})();", ctx);
   return ctx.__m;
 }
 

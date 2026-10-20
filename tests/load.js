@@ -9,7 +9,9 @@ function load(){
   const names=["SAMPLE_SUMMARY","LINES_SNAPSHOT","LINES_SNAPSHOT_DATE","parseSummary","parseLines","buildGame","targetsAt","puckAt","htmlToText","linesDate","perName","perShort","splitGames","linesSubset","packShare","unpackShare"];
   const ctx={console,TextEncoder,Blob,Response,CompressionStream,DecompressionStream,btoa,atob};
   vm.createContext(ctx);
-  vm.runInContext('"use strict";\n'+src+"\n;globalThis.__api={"+names.map(n=>`${n}:typeof ${n}!=="undefined"?${n}:undefined`).join(",")+"};",ctx);
+  // Le tout dans une fonction : les déclarations y restent locales (dans un contexte vm, chaque accès
+  // à une variable globale est lent, ce qui ralentirait beaucoup la simulation).
+  vm.runInContext('(function(){"use strict";const {Math,Infinity,NaN,Set,Map,Array,Object,Number,String,JSON,Float32Array,Float64Array,Error}=globalThis;\n'+src+"\n;globalThis.__api={"+names.map(n=>`${n}:typeof ${n}!=="undefined"?${n}:undefined`).join(",")+"};})();",ctx);
   return ctx.__api;
 }
 function fixture(name){return fs.readFileSync(path.join(__dirname,"fixtures",name),"utf8")}
