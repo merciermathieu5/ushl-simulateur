@@ -101,17 +101,21 @@ test("hors-jeu : l'attaquant est en zone avant la rondelle; sinon personne ne la
       const me = tg.list.find(x => x.p === o.p);
       assert.ok(me && d * me.x > 25 && d * tg.puck.x < 25, `${name} : hors-jeu de ${o.p.name} à ${fmtT(o.t1)}`);
     });
-    // entrées en zone permises : à l'instant où la rondelle franchit la ligne bleue, aucun attaquant ne la devance
-    G.script.filter(it => it.k === "carry" && it.side).forEach(it => {
-      const d = G.attackDir(it.side, it.t0), u0 = d * it.x0, u1 = d * it.x1;
-      if (!(u0 < 24 && u1 > 25)) return;
-      if (G.offsides.some(o => o.t1 >= it.t0 - 0.01 && o.t1 <= it.t1 + 0.01)) return;
-      const f = (25 - u0) / (u1 - u0), tc = it.t0 + (it.t1 - it.t0) * Math.max(0, f - 0.04);
-      const tg = api.targetsAt(G, tc), pu = d * tg.puck.x;
-      if (pu > 25) return;
-      tg.list.filter(o => o.side === it.side && o.role !== "G" && !o.carrier).forEach(o =>
-        assert.ok(d * o.x <= 25.01, `${name} : ${o.p.name} en zone avant la rondelle à ${fmtT(tc)} (u=${(d * o.x).toFixed(1)})`));
-    });
+    // entrées en zone permises : juste avant que la rondelle portée franchisse la ligne bleue, aucun coéquipier n'est déjà en zone
+    const T = G.rec.t;
+    let n = 0;
+    for (let k = 1; k < T.length; k++) {
+      if (T[k] - T[k - 1] < 1e-9) continue;
+      const it = G.itemAt(T[k - 1]), it2 = G.itemAt(T[k]);
+      if (!it || it.k !== "carry" || !it2 || it2.k !== "carry" || it2.side !== it.side) continue;
+      const d = G.attackDir(it.side, T[k - 1]), u0 = d * G.rec.px[k - 1], u1 = d * G.rec.px[k];
+      if (!(u0 <= 25 && u1 > 25)) continue;
+      if (G.offsides.some(o => Math.abs(o.t1 - T[k]) < 0.25)) continue;
+      n++;
+      api.targetsAt(G, T[k - 1]).list.filter(o => o.side === it.side && o.role !== "G" && o.p !== it.p).forEach(o =>
+        assert.ok(d * o.x <= 25.01, `${name} : ${o.p.name} en zone avant la rondelle à ${fmtT(T[k])} (u=${(d * o.x).toFixed(1)})`));
+    }
+    assert.ok(n > 10, `${name} : ${n} entrées en zone avec la rondelle`);
   }
 });
 
@@ -148,4 +152,66 @@ test("trame continue : porteur et receveur sur la glace, rien ne déborde de la 
       SIDES.forEach(s => assert.strictEqual(tg.list.filter(o => o.side === s).length, G.segAt(t).line[s].length + 1, `${name} : effectif à ${fmtT(t)}`));
     }
   }
+});
+
+test("d'autres graines : chaque partie différente reste fidèle à la feuille de match", () => {
+  // le même sommaire rejoué avec une autre graine donne un autre match : tirs à la seconde près, passes des buts,
+  // porteurs et receveurs sur la glace, jamais un joueur attaquant et défenseur à la fois
+  const cases = [["finale 1", read("USHL21PLF-R4-1.html"), L], ["finale 4", read("USHL21PLF-R4-4.html"), L], ["base.txt", fixture("base.txt"), SNAP]];
+  for (const [name, raw, Ls] of cases) for (const v of [1, 2]) {
+    const G = api.buildGame(api.parseSummary(raw), Ls, raw + "|graine" + v), tag = `${name} (graine ${v})`;
+    assert.strictEqual(G.late.length, 0, `${tag} : tir en retard`);
+    G.shots.forEach(s => {
+      const it = G.script.find(x => x.k === "shot" && near(x.t1, s.t, 0.06));
+      assert.ok(it && it.p === s.p && onIce(G, s.side, s.p, s.t - 0.01), `${tag} : tir de ${s.p.name} à ${fmtT(s.t)}`);
+    });
+    G.goals.forEach(g => {
+      const shot = G.script.find(x => x.k === "shot" && x.goal && near(x.t1, g.t, 0.06)), n = g.assists.length;
+      assert.ok(shot && shot.p === g.scorer, `${tag} : but de ${g.scorer.name}`);
+      if (!n) return;
+      const passes = G.script.filter(x => x.k === "pass" && x.t1 <= shot.t0 + 1e-6 && x.t0 > g.t - 10).slice(-n);
+      const want = n === 2 ? [[g.assists[1], g.assists[0]], [g.assists[0], g.scorer]] : [[g.assists[0], g.scorer]];
+      assert.deepStrictEqual(Array.from(passes, x => x.from.name + ">" + x.to.name), want.map(([a, b]) => a.name + ">" + b.name), `${tag} : passes du but de ${fmtT(g.t)}`);
+    });
+    G.script.forEach(it => {
+      if (it.k === "carry" && it.p) assert.ok(onIce(G, it.side, it.p, (it.t0 + it.t1) / 2), `${tag} : porteur ${it.p.name} à ${fmtT(it.t0)}`);
+      if (it.k === "pass" && it.to) assert.ok(onIce(G, it.side, it.to, it.t1), `${tag} : receveur ${it.to.name} à ${fmtT(it.t1)}`);
+    });
+    SIDES.forEach(s => G.plan[s].F.forEach(f => G.plan[s].D.forEach(d => {
+      if (d.a < f.b - 1e-6 && d.b > f.a + 1e-6) assert.ok(!f.members.some(m => d.members.some(n => n.p === m.p)), `${tag} : joueur attaquant et défenseur à ${fmtT(f.a)}`);
+    })));
+  }
+});
+
+test("changements : attaquants et défenseurs chacun à leur moment, à la mise au jeu ou à la volée", () => {
+  let both = 0, one = 0, atStop = 0, fly = 0;
+  for (const { G, real } of games) {
+    if (!real) continue;
+    const stops = G.stopsList.map(s => s.t);
+    for (let i = 1; i < G.segs.length; i++) {
+      const a = G.segs[i - 1], b = G.segs[i];
+      SIDES.forEach(s => {
+        if (b.state[s].kind !== "ES" || a.state[s].kind !== "ES") return;
+        const prev = new Set(a.line[s].map(e => e.p)), inn = b.line[s].filter(e => !prev.has(e.p));
+        if (!inn.length) return;
+        const f = inn.some(e => !["LD", "RD"].includes(e.role)), d = inn.some(e => ["LD", "RD"].includes(e.role));
+        if (f && d) both++; else one++;
+        if (stops.some(x => Math.abs(x - b.a) < 0.3)) atStop += inn.length; else fly += inn.length;
+      });
+    }
+  }
+  // les deux groupes ne changent pas d'un bloc, et la plupart des changements se font en plein jeu
+  assert.ok(one > both * 2, `${one} changements d'un seul groupe, ${both} des deux à la fois`);
+  assert.ok(fly > atStop && atStop > 0.15 * (fly + atStop), `${atStop} joueurs arrivés à un arrêt de jeu, ${fly} à la volée`);
+});
+
+test("mises en échec : toutes celles de la feuille, souvent contre la bande", () => {
+  const boardD = (x, y) => { const ax = Math.abs(x), ay = Math.abs(y), cx = 72, cy = 14.5; if (ax > cx && ay > cy) return 28 - Math.hypot(ax - cx, ay - cy); return Math.min(100 - ax, 42.5 - ay); };
+  let n = 0, wall = 0;
+  for (const { name, G } of games) {
+    const want = SIDES.reduce((a, s) => a + G.roster[s].reduce((b, p) => b + (p.ht || 0), 0), 0);
+    assert.strictEqual(G.hits.length, want, `${name} : ${G.hits.length} mises en échec sur ${want}`);
+    G.hits.forEach(h => { const v = api.targetsAt(G, h.t).list.find(o => o.p === h.victim); n++; if (v && boardD(v.x, v.y) < 10) wall++; });
+  }
+  assert.ok(wall / n > 0.3, `${(100 * wall / n).toFixed(0)} % des mises en échec contre la bande`);
 });
