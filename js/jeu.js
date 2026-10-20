@@ -25,7 +25,7 @@ const RK={GOAL:89,BLUE:25,EZX:69,NZX:20,DOTY:22,HALFW:42.5,HALFL:100,CORNER:28};
 const SPD={pass:62,shot:88,dump:68};
 // Fréquences du jeu libre (par décision du porteur), réglées pour donner les moyennes d'un match de la LNH :
 // une cinquantaine de mises au jeu, 6 à 10 dégagements refusés, 4 à 8 hors-jeu par match.
-const PJ={turnD:0.08,icing:0.085,turnN:0.08,offside:0.085,controlled:0.5,turnO:0.22,out:0.07,freeze:0.5,logTurn:0.45};
+const PJ={turnD:0.08,icing:0.15,turnN:0.08,offside:0.085,controlled:0.5,turnO:0.22,out:0.07,freeze:0.5,logTurn:0.45};
 const isDrole=r=>r==="LD"||r==="RD";
 const otherSide=s=>s==="home"?"away":"home";
 // les huit points de mise au jeu hors du centre
@@ -332,6 +332,9 @@ function buildScript(G,R){
     const dirOf=s=>G.attackDir(s,a+1);
     const ct=tt=>Math.min(Math.max(tt,a),b-1e-3);
     let t=a, x=0, y=0, side=null, car=null, last=null;
+    // une équipe qui vient d'être prise en défaut se surveille : la chance diminue à chaque fois dans la période
+    const fautes={away:{offside:0,icing:0},home:{offside:0,icing:0}};
+    const chance=(s,k)=>PJ[k]/(1+fautes[s][k]);
 
     // moments imposés par la feuille de match : tirs (dont les buts) et pénalités sifflées
     const anchors=[];
@@ -572,7 +575,7 @@ function buildScript(G,R){
     function breakout(left,tEnd,want){
       const s=side, d=dirOf(s), u=U(s,x), sg=Wl(s,y)>=0?1:-1, safe=want===s;
       if(!safe&&R()<PJ.turnD&&left>6){takeaway(otherSide(s));return}
-      if(!safe&&R()<PJ.icing&&left>8){icingTry();return}
+      if(!safe&&R()<chance(s,"icing")&&left>8){icingTry();return}
       const M=mates(s,t,car), pick=role=>M.find(e=>e.role===role), r=R();
       if(isDrole(roleOf(s,car,t)||"")&&u>-72&&r<0.22){carry(-d*92,d*sg*5,Math.min(tEnd,t+2.2));return}   // derrière son filet
       const strong=sg<0?"LW":"RW";
@@ -601,6 +604,7 @@ function buildScript(G,R){
       add({k:"dump",t0:t,t1:t+dd/SPD.dump,side:s,from:car,x0:x,y0:y,x1:target.x,y1:target.y,kind:"clear"});
       x=target.x;y=target.y;last=s;side=null;car=null;
       if(U(s,x0)<0&&!shortOf(s,t)){
+        fautes[s].icing++;
         loose(x-d*3,y*0.8,1.1,"icing");
         plays.push({t,type:"icing",side:s});
         whistle("icing",{side:s,y0});
@@ -625,7 +629,8 @@ function buildScript(G,R){
     }
     function entry(tEnd,want){
       const s=side, d=dirOf(s), w=Wl(s,y), sg=w>=0?1:-1, safe=want===s;
-      if(!safe&&R()<PJ.offside&&tEnd-t>6){
+      if(!safe&&R()<chance(s,"offside")&&tEnd-t>6){
+        fautes[s].offside++;
         // hors-jeu : un attaquant franchit la ligne bleue avant la rondelle
         const F=mates(s,t,car).filter(e=>!isDrole(e.role));
         const p=F.length?F[Math.floor(R()*F.length)].p:null, t0=t;
