@@ -25,7 +25,7 @@ function initUI(){
   $("share").onclick=shareLink;
   $("gamePick").onchange=e=>{const x=games[+e.target.value];play(x,curL);if(x.id&&location.hash!=="#match="+x.id)try{history.replaceState(null,"","#match="+x.id)}catch(err){}};
 
-  let G=null, g=0, games=[], skippedNote="", curRaw="", curL=null, curGame=null, hitFx=[], playing=false, speed=20, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedKey="", lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
+  let G=null, g=0, games=[], skippedNote="", curRaw="", curL=null, curGame=null, hitFx=[], playing=false, speed=1, freezeUntil=0, lastNow=0, posMap=new Map(), lastFeedKey="", lastSecond=-1, toastUntil=0, bannerUntil=0, bannerSticky=false, litUntil={away:0,home:0};
   // arrêt de jeu en cours (les joueurs gagnent leur place pour la mise au jeu), trace de la rondelle, ligne ou point mis en évidence
   let freeze=null, trail=[], mark=null, feedAll=[], ppStarts=[];
   let feedMode=store.get("ushl-sim-feed")==="saillants"?"saillants":"tout";
@@ -161,8 +161,8 @@ function initUI(){
   requestAnimationFrame(frame);
   openShared(); window.addEventListener("hashchange",openShared);
 
-  // Durée d'un arrêt de jeu (temps réel) : plus court quand la lecture est rapide
-  const whistleMs=()=>reduceMotion?600:speed<=10?1300:speed<=20?1050:speed<=40?800:600;
+  // Durée d'un arrêt de jeu (temps réel) : un peu plus court en lecture rapide
+  const whistleMs=()=>reduceMotion?600:speed>=10?1000:1300;
   function startFreeze(now,ms,delay){
     freezeUntil=now+ms;
     const tg=targetsAt(G,g), it=tg.item;
