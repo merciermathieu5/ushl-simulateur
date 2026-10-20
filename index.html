@@ -13,8 +13,8 @@
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <svg class="puck" viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="20" rx="13" ry="6" fill="var(--ink)"/><rect x="3" y="13" width="26" height="7" fill="var(--ink)"/><ellipse cx="16" cy="13" rx="13" ry="6" fill="var(--muted)"/></svg>
-      <div><h1>Simulateur de match</h1><div class="sub">Ligue USHL, moteur FHL</div></div>
+      <svg class="puck" id="puck" viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="20" rx="13" ry="6" fill="var(--ink)"/><rect x="3" y="13" width="26" height="7" fill="var(--ink)"/><ellipse cx="16" cy="13" rx="13" ry="6" fill="var(--muted)"/></svg>
+      <div><h1>Simulateur de match</h1><div class="sub">Ligue USHL, moteur FHL<span id="egg" class="egg" aria-hidden="true"></span></div></div>
     </div>
     <div class="topbtns">
       <button class="btn" id="share" hidden>Copier le lien</button>
@@ -26,7 +26,10 @@
     <section id="autoBox" class="auto" aria-labelledby="autoTitle" hidden>
       <div class="autohead">
         <h2 id="autoTitle">Matchs de la ligue</h2>
-        <label class="ctl" id="autoSeasonWrap" hidden>Saison <select id="autoSeason"></select></label>
+        <div class="autoctl">
+          <button type="button" class="btn small" id="autoScores" aria-pressed="false">Afficher les pointages</button>
+          <label class="ctl" id="autoSeasonWrap" hidden>Saison <select id="autoSeason"></select></label>
+        </div>
       </div>
       <p class="lead" id="autoMeta">Mis à jour automatiquement après chaque simulation.</p>
       <p class="lead" id="autoEmpty" hidden>Aucun match simulé pour l’instant. Les matchs apparaîtront ici d’eux-mêmes après la première simulation de la saison.</p>

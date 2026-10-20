@@ -32,6 +32,10 @@ button,select,textarea,input{font:inherit;color:inherit}
 .brand h1{font-family:"Barlow Condensed",Barlow,sans-serif;font-weight:700;font-size:1.75rem;letter-spacing:.01em;margin:0;line-height:1}
 .brand .sub{color:var(--muted);font-size:.95rem}
 .puck{width:30px;height:30px;flex:none}
+.puck.spin{animation:spin .7s ease-out}
+@keyframes spin{to{transform:rotate(720deg)}}
+.egg{margin-left:8px;color:var(--red);font-weight:700;opacity:0;transition:opacity .4s}
+.egg.on{opacity:1}
 .topbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .gamebar{margin:0 0 10px}
 .gamebar select{max-width:min(100%,520px)}
@@ -53,6 +57,12 @@ textarea{width:100%;min-height:300px;resize:vertical;border:1px solid var(--line
 /* Matchs de la ligue (récupérés automatiquement) */
 .auto{margin:0 0 26px}
 .autohead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.autoctl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn.small{padding:6px 10px;font-size:.88rem}
+.btn[aria-pressed="true"]{background:var(--surface2);border-color:var(--muted)}
+.gcard.avoir .cname{color:var(--ink)}
+.gcard.avoir .cfoot{color:var(--blue);font-weight:600}
+.marks.cache .mk.goal{display:none}
 .daynav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
 .daynav select{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:8px 10px;min-width:0;max-width:min(100%,440px)}
 .ib:disabled{opacity:.4;cursor:default}
@@ -61,7 +71,7 @@ textarea{width:100%;min-height:300px;resize:vertical;border:1px solid var(--line
 .gcard:hover{border-color:var(--muted);background:var(--surface2)}
 .gcard[aria-busy="true"]{opacity:.6;cursor:progress}
 .crow{display:flex;align-items:center;gap:9px;font-size:1.05rem}
-.crow .chip{width:6px;height:20px;align-self:center}
+.crow .chip{width:6px;height:20px;align-self:center;box-shadow:0 0 0 1px var(--line)}
 .cname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
 .cscore{font-family:"Barlow Condensed",Barlow,sans-serif;font-weight:600;font-size:1.4rem;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--muted)}
 .crow.win .cname,.crow.win .cscore{color:var(--ink);font-weight:700}

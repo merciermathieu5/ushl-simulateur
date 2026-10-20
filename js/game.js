@@ -1,7 +1,7 @@
 "use strict";
 
 /* ---------- Construction du match ---------- */
-function buildGame(S,L,seedText){
+function buildGame(S,L,seedText,opts){
   const rng=mulberry32(hashStr(seedText||"x"));
   const R=()=>rng();
   const G={S,team:{},roster:{},goalie:{},goalies:{},goalieSwap:{},pulls:[],hits:[],units:{},grp:{},diag:{},goals:[],pens:[],shots:[],segs:[],kfs:[],events:[],stops:[]};
@@ -196,23 +196,30 @@ function buildGame(S,L,seedText){
     G.diag[side]={fromLines:placed.size,total:act.length,hasTeam:!!L.teams[S[side]]};
   });
 
-  // Présences (segments)
-  function lineup(side,st,c,boxed,must){
+  // Présences. Pour chaque équipe, les attaquants et les défenseurs changent chacun à leur rythme : un trio
+  // reste une quarantaine de secondes sur la glace, une paire un peu plus. Les unités spéciales (avantage et
+  // désavantage numériques) changent d'un bloc. Un changement ordinaire a une fenêtre de quelques secondes :
+  // la trame de jeu (js/jeu.js) choisit le vrai moment, à un arrêt de jeu ou quand la rondelle passe en zone
+  // neutre, sinon à la fin de la fenêtre. Les buts, pénalités, retraits du gardien et fins de période imposent
+  // leurs moments.
+  function lineup(side,st,c,boxed,must,busy){
     const U=G.units[side]; let Lr;
     if(st.kind==="PP"){const u=U.PP[c.pp%U.PP.length];Lr=[{p:u.F[0],role:"C"},{p:u.F[1],role:"LW"},{p:u.F[2],role:"RW"},{p:u.D[0],role:"LD"},{p:u.D[1],role:"RD"}];if(st.n===4)Lr.splice(2,1);if(st.n===3)Lr.splice(1,2)}
     else if(st.kind==="PK"){const u=U.PK[c.pk%U.PK.length];Lr=[{p:u.F[0],role:"C"},{p:u.F[1],role:"W"},{p:u.D[0],role:"LD"},{p:u.D[1],role:"RD"}];if(st.n===3)Lr.splice(1,1)}
     else{const f=U.F[c.f%U.F.length],d=U.D[c.d%U.D.length];Lr=[{p:f.C,role:"C"},{p:f.LW,role:"LW"},{p:f.RW,role:"RW"},{p:d[0],role:"LD"},{p:d[1],role:"RD"}];if(st.n===4)Lr.splice(2,1);if(st.n===3)Lr.splice(1,2)}
     const inL=new Set(); const gl=G.grp[side];
-    const free=q=>!boxed.has(q)&&!inL.has(q)&&!Lr.some(x=>x.p===q);
+    // busy : joueurs déjà sur la glace avec l'autre groupe (attaquants ou défenseurs)
+    const taken=q=>boxed.has(q)||(busy&&busy.has(q));
+    const free=q=>!taken(q)&&!inL.has(q)&&!Lr.some(x=>x.p===q);
     const neediest=list=>{let best=null;list.forEach(q=>{if(free(q)&&(!best||need(q)>need(best)))best=q});return best};
     const out=Lr.map(e=>{
       let p=e.p; const isD=e.role==="LD"||e.role==="RD";
       // Joueur déjà au-delà de son temps de glace (blessé en cours de match, peu utilisé) :
       // remplacé par le joueur de la même position qui en manque le plus.
-      if(p&&!boxed.has(p)&&!inL.has(p)&&need(p)<-Math.max(20,0.05*(want.get(p)||0))){
+      if(p&&!taken(p)&&!inL.has(p)&&need(p)<-Math.max(20,0.05*(want.get(p)||0))){
         const q=neediest(isD?gl.D:gl.F); if(q&&need(q)>0) p=q;
       }
-      if(!p||boxed.has(p)||inL.has(p)) p=neediest(isD?gl.D:gl.F)||neediest(isD?gl.F:gl.D);
+      if(!p||taken(p)||inL.has(p)) p=neediest(isD?gl.D:gl.F)||neediest(isD?gl.F:gl.D);
       if(p) inL.add(p);
       return {p,role:e.role};
     }).filter(e=>e.p);
@@ -221,7 +228,7 @@ function buildGame(S,L,seedText){
     // Marqueur, passeurs et joueur pénalisé sont sur la glace au moment de l'action : ils prennent
     // la place du joueur de leur position qui a le moins besoin de temps de glace.
     (must||[]).forEach(m=>{
-      if(!m||boxed.has(m)||out.some(x=>x.p===m)) return;
+      if(!m||taken(m)||out.some(x=>x.p===m)) return;
       const same=x=>(x.role==="LD"||x.role==="RD")===(m.grp==="D");
       let k=-1;
       out.forEach((x,i)=>{
@@ -257,69 +264,224 @@ function buildGame(S,L,seedText){
       const sc=ps.reduce((x,p)=>x+need(p),0)/Math.max(1,ps.length)+R()*12;if(sc>best){best=sc;bi=i}});
     return bi;
   };
-  const ctx={away:{f:0,d:0,pp:0,pk:0,ppStart:0,last:null},home:{f:0,d:0,pp:0,pk:0,ppStart:0,last:null}};
+  const isDr=r=>r==="LD"||r==="RD";
+  // joueurs qui doivent être sur la glace (marqueur, passeurs, joueur pénalisé) entre a et b
+  const mustIn=(side,a,b)=>{
+    const m=[];
+    G.goals.forEach(g=>{const tt=Math.max(perStart(g.t-0.001),g.t-0.3);if(g.side===side&&tt>=a&&tt<b)[g.scorer,...g.assists].forEach(p=>p&&m.push({p,t:g.t}))});
+    G.pens.forEach(p=>{const tt=Math.max(perStart(p.t-0.001),p.t-0.3);if(p.side===side&&p.p&&tt>=a&&tt<b&&!G.boxedAt(side,tt).has(p.p))m.push({p:p.p,t:p.t})});
+    return m;
+  };
   const perStarts=new Set([...Array(G.nPer)].map((_,i)=>i*1200));
-  for(let i=0;i<bs.length-1;i++){
-    const a=bs[i],b=bs[i+1]; if(b-a<0.001) continue;
-    const st=stateAt(a+0.0005); let cur=a;
-    while(cur<b-0.001){
-      const special=st.away.kind!=="ES";
-      const len=special?42+R()*20:34+R()*22;
-      let e=Math.min(b,cur+len); if(b-e<14) e=b;
-      // pas de changement de trio dans les 6 secondes qui précèdent un but : le but et ses passes se jouent sur une même présence
-      if(e<b&&G.goals.some(g=>g.t>e&&g.t-e<6&&g.t<=b+0.06)) e=b;
-      const seg={a:cur,b:e,line:{},state:st,forced:{away:new Set(),home:new Set()},free:e<b};   // free : changement de trio ordinaire, sans arrêt de jeu imposé
-      SIDES.forEach(side=>{
-        const c=ctx[side],k=st[side].kind;
-        if(k==="ES"){
-          const U=G.units[side];
-          if(perStarts.has(cur)){c.f=0;c.d=0}
-          else{c.f=pickUnit(U.F,c.f,c.last==="ES",f=>[f.C,f.LW,f.RW]);
-               c.d=pickUnit(U.D,c.d,c.last==="ES",d=>d)}
-        } else if(k==="PP"){if(c.last!=="PP")c.ppStart=cur;c.pp=(cur-c.ppStart)<62?0:1}
-        else{c.pk=c.last==="PK"?c.pk+1:0}
-        c.last=k;
-        const must=[];
-        G.goals.forEach(g=>{const tt=Math.max(perStart(g.t-0.001),g.t-0.3);if(g.side===side&&tt>=cur&&tt<e)must.push(g.scorer,...g.assists)});
-        G.pens.forEach(p=>{const tt=Math.max(perStart(p.t-0.001),p.t-0.3);if(p.side===side&&p.p&&tt>=cur&&tt<e&&!G.boxedAt(side,tt).has(p.p))must.push(p.p)});
-        seg.line[side]=lineup(side,st[side],c,G.boxedAt(side,cur+0.0005),must.filter(Boolean));
-        seg.line[side].forEach(x=>toi.set(x.p,(toi.get(x.p)||0)+(e-cur)));
+  // Moments où le jeu est arrêté : début de période, but, pénalité. Les autres frontières (fin de pénalité,
+  // retrait du gardien) arrivent pendant le jeu : les joueurs déjà sur la glace y restent un moment.
+  const near=(a,b)=>Math.abs(a-b)<1e-6;
+  const whistleAt=t=>perStarts.has(t)||G.goals.some(g=>near(t,g.t)||near(t,g.t+0.05))||G.pens.some(p=>near(t,p.t));
+  // rôles d'une situation, par groupe (attaquants : C, LW, RW, W, X; défenseurs : LD, RD)
+  const rolesFor=(side,st,c,grp)=>lineup(side,st,c,new Set(),[]).map(x=>x.role).filter(r=>grp==="D"?isDr(r):!isDr(r));
+  G.plan={away:{F:[],D:[]},home:{F:[],D:[]}};
+  SIDES.forEach(side=>{
+    const U=G.units[side], tracks=G.plan[side];
+    const c={f:0,d:0,pp:0,pk:0,ppStart:0,last:null};
+    const covering=(grp,t)=>{const tr=tracks[grp];for(let i=tr.length-1;i>=0;i--){const x=tr[i];if(x.a<=t&&t<x.b)return x;if(x.b<=t)break}return null};
+    const push=(grp,a,b,members,kind,ib,must,extra)=>{
+      const x={a,b,members,kind,fixedB:b>=ib-1e-6,must:must.map(m=>m.t),side,grp,atWhistle:whistleAt(a)};
+      if(extra) Object.assign(x,extra);
+      tracks[grp].push(x);
+      members.forEach(m=>toi.set(m.p,(toi.get(m.p)||0)+(b-a)));
+      return x;
+    };
+    for(let i=0;i<bs.length-1;i++){
+      const ia=bs[i], ib=bs[i+1]; if(ib-ia<0.001) continue;
+      const st=stateAt(ia+0.0005), k=st[side].kind;
+      const endAt=(t0,len)=>{
+        let e=Math.min(ib,t0+len); if(ib-e<12) e=ib;
+        // pas de changement dans les 6 secondes qui précèdent un but : le but et ses passes se jouent sur une même présence
+        if(e<ib&&G.goals.some(g=>g.t>e&&g.t-e<6&&g.t<=ib+0.06)) e=ib;
+        return e;
+      };
+      const boxed=G.boxedAt(side,ia+0.0005);
+      // Frontière en plein jeu : chaque groupe garde ses joueurs encore quelques secondes, le joueur qui sort
+      // du banc des pénalités (ou le 6e attaquant) complète l'alignement, puis les changements reprennent.
+      const mid=!perStarts.has(ia)&&!whistleAt(ia);
+      // ex : joueurs déjà pris par l'autre groupe (un même joueur ne peut être attaquant et défenseur en même temps)
+      const cont=(grp,ex)=>{
+        const prev=covering(grp,ia-0.001); if(!mid||!prev||prev.b<ia-1e-6) return null;
+        const roles=rolesFor(side,st[side],c,grp), keep=prev.members.filter(m=>!boxed.has(m.p)&&!(ex&&ex.has(m.p)));
+        const out=[], used=new Set(ex||[]);
+        roles.forEach(r=>{const m=keep.find(q=>q.role===r&&!used.has(q.p));if(m){out.push({p:m.p,role:r});used.add(m.p)}else out.push({p:null,role:r})});
+        out.forEach(o=>{if(o.p)return;const m=keep.find(q=>!used.has(q.p));if(m){o.p=m.p;used.add(m.p)}});
+        // joueur qui revient du banc des pénalités, sinon celui qui manque le plus de temps de glace
+        const back=G.pens.filter(p=>p.side===side&&p.p&&near(p.boxEnd,ia)&&!boxed.has(p.p)).map(p=>p.p);
+        const other=covering(grp==="F"?"D":"F",ia-0.001), busy=new Set(other?other.members.map(m=>m.p):[]);
+        if(ex) ex.forEach(p=>busy.add(p));
+        out.forEach(o=>{
+          if(o.p) return;
+          let q=back.find(b=>!used.has(b)&&(b.grp==="D")===(grp==="D"));
+          if(!q){let best=null;G.grp[side][grp].forEach(r=>{if(r.active&&!used.has(r)&&!boxed.has(r)&&!busy.has(r)&&(!best||need(r)>need(best)))best=r});q=best}
+          if(q){o.p=q;used.add(q)}
+        });
+        return out.filter(o=>o.p);
+      };
+      if(k!=="ES"){
+        // unités spéciales : attaquants et défenseurs changent ensemble
+        let t0=ia;
+        const cF=cont("F"), cD=cont("D",new Set((cF||[]).map(m=>m.p)));
+        if(cF&&cD&&cF.length+cD.length>=st[side].n+(st[side].pulled?1:0)){
+          const e=endAt(ia,6+R()*8), must=mustIn(side,ia,e);
+          const fx=push("F",ia,e,cF,k,ib,must.filter(m=>m.p.grp!=="D"),{cont:true});
+          const dx=push("D",ia,e,cD,k,ib,must.filter(m=>m.p.grp==="D"),{cont:true});
+          fx.pair=dx; dx.pair=fx;
+          t0=e;
+        }
+        while(t0<ib-0.001){
+          const e=endAt(t0,k==="PP"?44+R()*18:36+R()*14);
+          if(k==="PP"){if(c.last!=="PP")c.ppStart=t0;c.pp=(t0-c.ppStart)<62?0:1}else c.pk=c.last==="PK"?c.pk+1:0;
+          c.last=k;
+          const must=mustIn(side,t0,e);
+          const L5=lineup(side,st[side],c,G.boxedAt(side,t0+0.0005),must.map(m=>m.p));
+          // unité spéciale : attaquants et défenseurs changent ensemble (un attaquant peut jouer à la pointe)
+          const fx=push("F",t0,e,L5.filter(x=>!isDr(x.role)),k,ib,must.filter(m=>m.p.grp!=="D"));
+          const dx=push("D",t0,e,L5.filter(x=>isDr(x.role)),k,ib,must.filter(m=>m.p.grp==="D"));
+          fx.pair=dx; dx.pair=fx;
+          t0=e;
+        }
+        continue;
+      }
+      // forces égales : le trio et la paire changent chacun à leur rythme
+      const fresh=perStarts.has(ia);
+      if(fresh){c.f=0;c.d=0}
+      let tf=ia, td=ia, firstF=true, firstD=true;
+      const contTaken=new Set();
+      ["F","D"].forEach(grp=>{
+        const m=cont(grp,contTaken); if(!m||!m.length) return;
+        const e=endAt(ia,8+R()*12), must=mustIn(side,ia,e).filter(q=>(q.p.grp==="D")===(grp==="D"));
+        // marqueur ou passeur absent de l'alignement conservé : il prend la place du joueur qui en a le moins besoin
+        must.forEach(q=>{if(m.some(o=>o.p===q.p)||boxed.has(q.p)||contTaken.has(q.p))return;let j=-1;m.forEach((o,i)=>{if(must.some(z=>z.p===o.p))return;if(j<0||need(o.p)<need(m[j].p))j=i});if(j>=0)m[j]={p:q.p,role:m[j].role}});
+        m.forEach(o=>contTaken.add(o.p));
+        push(grp,ia,e,m,"ES",ib,must,{cont:true});
+        if(grp==="F"){tf=e;firstF=false}else{td=e;firstD=false}
       });
-      G.segs.push(seg); cur=e;
+      while(tf<ib-0.001||td<ib-0.001){
+        const grp=tf<=td?"F":"D", t0=grp==="F"?tf:td;
+        const e=endAt(t0,grp==="F"?34+R()*16:38+R()*18);
+        if(grp==="F"){if(!(fresh&&firstF))c.f=pickUnit(U.F,c.f,true,f=>[f.C,f.LW,f.RW]);firstF=false}
+        else{if(!(fresh&&firstD))c.d=pickUnit(U.D,c.d,true,d=>d);firstD=false}
+        c.last="ES";
+        const o=covering(grp==="F"?"D":"F",t0), busy=new Set(o?o.members.map(x=>x.p):[]);
+        const must=mustIn(side,t0,e).filter(m=>(m.p.grp==="D")===(grp==="D"));
+        const L5=lineup(side,st[side],c,G.boxedAt(side,t0+0.0005),must.map(m=>m.p),busy);
+        push(grp,t0,e,L5.filter(x=>grp==="D"?isDr(x.role):!isDr(x.role)),"ES",ib,must);
+        if(grp==="F") tf=e; else td=e;
+      }
     }
-  }
-  const segAt=t=>{const sg=G.segs;let lo=0,hi=sg.length-1;if(t>=G.T)return sg[hi];while(lo<=hi){const m=(lo+hi)>>1;if(t<sg[m].a)hi=m-1;else if(t>=sg[m].b)lo=m+1;else return sg[m]}return sg[Math.max(0,Math.min(sg.length-1,lo))]};
-  G.segAt=segAt;
+    // Fenêtre de chaque changement ordinaire : jusqu'à 7 s plus tôt ou 5 s plus tard, jamais pendant un but ou une
+    // pénalité qui demande ces joueurs, jamais au point de faire une présence de moins de 12 s.
+    ["F","D"].forEach(grp=>{
+      const tr=tracks[grp];
+      tr.forEach((x,i)=>{
+        const nx=tr[i+1];
+        if(x.fixedB||!nx){x.w0=x.w1=x.b;return}
+        let w0=Math.max(x.b-7,x.a+12), w1=Math.min(x.b+5,nx.b-12);
+        x.must.forEach(t=>{w0=Math.max(w0,t+0.2)});
+        nx.must.forEach(t=>{w1=Math.min(w1,t-10)});
+        if(!(w0<=x.b&&x.b<=w1)){w0=w1=x.b}
+        x.w0=w0; x.w1=w1;
+      });
+    });
+    tracks.F.forEach(x=>{if(x.pair){const w0=Math.max(x.w0,x.pair.w0),w1=Math.min(x.w1,x.pair.w1);if(w0<=w1){x.w0=x.pair.w0=w0;x.w1=x.pair.w1=w1}else{x.w0=x.w1=x.pair.w0=x.pair.w1=x.b}}});
+  });
+  // Lignes de la glace aux moments prévus (la trame de jeu les remplace par les moments réels des changements)
+  G.buildSegs=()=>{
+    const cuts=new Set([0,G.T]);
+    SIDES.forEach(side=>["F","D"].forEach(grp=>G.plan[side][grp].forEach(x=>{cuts.add(x.a);cuts.add(x.b)})));
+    const ts=[...cuts].filter(t=>t>=0&&t<=G.T).sort((a,b)=>a-b);
+    const idx={away:{F:0,D:0},home:{F:0,D:0}};
+    G.segs=[];
+    for(let i=0;i<ts.length-1;i++){
+      const a=ts[i], b=ts[i+1]; if(b-a<1e-6) continue;
+      const seg={a,b,line:{},state:stateAt(a+0.0005),forced:{away:new Set(),home:new Set()}};
+      SIDES.forEach(side=>{
+        seg.line[side]=[];
+        ["F","D"].forEach(grp=>{
+          const tr=G.plan[side][grp]; let k=idx[side][grp];
+          while(k<tr.length-1&&tr[k].b<=a+1e-9) k++;
+          idx[side][grp]=k;
+          const x=tr[k]; if(!x||x.a>a+1e-9) return;
+          x.members.forEach(m=>{seg.line[side].push({p:m.p,role:m.role});if(x.forced&&x.forced.has(m.p))seg.forced[side].add(m.p)});
+        });
+        // ordre habituel : centre, ailiers, attaquant de plus, défenseurs
+        const ord={C:0,LW:1,RW:2,W:2,X:3,LD:4,RD:5};
+        seg.line[side].sort((u,v)=>ord[u.role]-ord[v.role]);
+      });
+      G.segs.push(seg);
+    }
+  };
+  // Sécurité : joueur qui doit être sur la glace (but, pénalité) et que les présences n'y ont pas mis
   function ensureOnIce(side,p,t){
-    if(!p) return; const seg=segAt(t); if(!seg) return; const Ln=seg.line[side]; const F=seg.forced[side];
-    if(Ln.some(e=>e.p===p)){F.add(p);return}
-    const isDrole=r=>r==="LD"||r==="RD";
-    let idx=Ln.findIndex(e=>!F.has(e.p)&&(isDrole(e.role)===(p.grp==="D")));
-    if(idx<0) idx=Ln.findIndex(e=>!F.has(e.p));
-    if(idx<0) return;
-    Ln[idx]={p,role:Ln[idx].role}; F.add(p);
+    if(!p) return;
+    const nat=p.grp==="D"?"D":"F", alt=nat==="D"?"F":"D", P=G.plan[side];
+    const cover=g=>P[g].find(s=>s.a<=t&&t<s.b), xN=cover(nat), xA=cover(alt);
+    for(const x of [xN,xA]) if(x&&x.members.some(m=>m.p===p)){x.forced=x.forced||new Set();x.forced.add(p);return true}
+    // un même joueur ne peut être attaquant et défenseur en même temps : on évite une présence qui en chevauche
+    // une autre où il est déjà
+    const over=(x,y)=>y.a<x.b-1e-6&&y.b>x.a+1e-6;
+    const conflict=(x,g)=>P[g==="D"?"F":"D"].some(y=>over(x,y)&&y.members.some(m=>m.p===p));
+    const x=xN&&!conflict(xN,nat)?xN:xA&&!conflict(xA,alt)?xA:xN||xA; if(!x) return false;
+    x.forced=x.forced||new Set();
+    const k=x.members.findIndex(m=>!x.forced.has(m.p)); if(k<0) return false;
+    x.members[k]={p,role:x.members[k].role}; x.forced.add(p);
+    // conflit inévitable : il quitte les présences de l'autre groupe qui chevauchent, remplacé par un joueur libre
+    const og=P.F.includes(x)?"D":"F";
+    P[og].forEach(y=>{
+      if(!over(x,y)) return; const j=y.members.findIndex(m=>m.p===p); if(j<0||(y.forced&&y.forced.has(p))) return;
+      const busy=new Set(); ["F","D"].forEach(g=>P[g].forEach(z=>{if(over(y,z))z.members.forEach(m=>busy.add(m.p))}));
+      const box=G.boxedAt(side,y.a+0.0005);
+      let best=null; G.grp[side][og].concat(G.grp[side][og==="D"?"F":"D"]).forEach(q=>{if(q.active&&!busy.has(q)&&!box.has(q)&&!best)best=q});
+      if(best) y.members[j]={p:best,role:y.members[j].role}; else y.members.splice(j,1);
+    });
+    return true;
   }
   G.goals.forEach(g=>{const tt=Math.max(perStart(g.t-0.001),g.t-0.3);[g.scorer,...g.assists].forEach(p=>ensureOnIce(g.side,p,tt))});
   G.pens.forEach(p=>{const tt=Math.max(perStart(p.t-0.001),p.t-0.3);const box=G.boxedAt(p.side,tt);if(!box.has(p.p))ensureOnIce(p.side,p.p,tt)});
   G.ensureOnIce=ensureOnIce;
+  // Moments sûrs pour les tirs de chaque joueur : au cœur de ses présences, quel que soit le moment exact des changements
+  G.cores=new Map();
+  SIDES.forEach(side=>["F","D"].forEach(grp=>{
+    const tr=G.plan[side][grp];
+    tr.forEach((x,i)=>{
+      const pv=tr[i-1], a=(pv?pv.w1:x.a)+3, b=x.fixedB?x.b-0.3:x.w0;
+      if(b-a<0.4) return;
+      const per=Math.min(Math.floor(x.a/1200)+1,G.nPer);
+      x.members.forEach(m=>{if(!G.cores.has(m.p))G.cores.set(m.p,[]);G.cores.get(m.p).push({a,b,per,kind:x.kind,role:m.role})});
+    });
+  }));
+  G.buildSegs();
+  const segAt=t=>{const sg=G.segs;let lo=0,hi=sg.length-1;if(t>=G.T)return sg[hi];while(lo<=hi){const m=(lo+hi)>>1;if(t<sg[m].a)hi=m-1;else if(t>=sg[m].b)lo=m+1;else return sg[m]}return sg[Math.max(0,Math.min(sg.length-1,lo))]};
+  G.segAt=segAt;
 
   // Sens d'attaque : on change de côté à chaque période
   G.attackDir=(side,t)=>{const per=Math.min(Math.floor(t/1200)+1,G.nPer);const hd=per%2===0?-1:1;return side==="home"?hd:-hd};
   // Tirs de chaque joueur, trame de jeu (possession, passes, mises au jeu, hors-jeu, dégagements refusés) et mises en échec : js/jeu.js
-  buildPlay(G,R,mulberry32(hashStr((seedText||"x")+"|mises")));
-
-  // Événements et arrêts
+  // Événements et arrêts connus d'avance (buts, pénalités, fins de période, gardiens)
   G.goals.forEach(g=>{G.events.push({t:g.t,type:"goal",g});G.stops.push({t:g.t,type:"goal",g})});
   G.pens.forEach(p=>{G.events.push({t:p.t,type:"pen",p});G.stops.push({t:p.t,type:"pen",p})});
   for(let k=1;k*1200<G.T;k++){G.events.push({t:k*1200,type:"end",per:k});G.stops.push({t:k*1200,type:"end",per:k})}
   const at=t=>{const per=Math.min(Math.floor(t/1200)+1,G.nPer);return {per,sec:t-(per-1)*1200}};
   G.pulls.forEach(p=>{const ev={t:p.a,type:"pull",side:p.side,...at(p.a)};G.events.push(ev);G.stops.push(ev)});
   SIDES.forEach(s=>{const t=G.goalieSwap[s];if(t===undefined)return;const ev={t,type:"goalie",side:s,out:G.goalies[s][0],in:G.goalies[s][1],...at(t)};G.events.push(ev);G.stops.push(ev)});
-  // coups de sifflet de la trame : arrêt de jeu puis mise au jeu (début de période, buts et fins de période sont déjà là)
-  G.stopsList.forEach(s=>{if(s.cause!=="period"&&s.cause!=="goal"&&s.cause!=="end")G.stops.push({t:s.t,type:"whistle",cause:s.cause,x:s.x,y:s.y,side:s.side,g:s.g,pens:s.pens})});
   G.events.push({t:G.T,type:"final"});
   // à temps égal : l'événement, puis la fin de période, puis le final
   const rank=e=>e.type==="final"?2:e.type==="end"?1:0;
-  G.events.sort((a,b)=>a.t-b.t||rank(a)-rank(b)); G.stops.sort((a,b)=>a.t-b.t);
+  G.events.sort((a,b)=>a.t-b.t||rank(a)-rank(b));
+  const base=G.stops.slice();
+  // coups de sifflet de la trame (au fur et à mesure du calcul) : arrêt de jeu puis mise au jeu
+  G.onAdvance=()=>{
+    G.stops=base.concat(G.stopsList.filter(s=>s.cause!=="period"&&s.cause!=="goal"&&s.cause!=="end").map(s=>({t:s.t,type:"whistle",cause:s.cause,x:s.x,y:s.y,side:s.side,g:s.g,pens:s.pens})));
+    G.stops.sort((a,b)=>a.t-b.t);
+  };
+  // Tirs de chaque joueur, trame de jeu (possession, passes, mises au jeu, hors-jeu, dégagements refusés) et mises en échec : js/jeu.js
+  buildPlay(G,R,mulberry32(hashStr((seedText||"x")+"|mises")),!!(opts&&opts.lazy));
+  G.onAdvance();
   return G;
 }

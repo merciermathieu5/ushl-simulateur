@@ -6,7 +6,33 @@ if(typeof document!=="undefined") initUI();
 function initUI(){
   const $=id=>document.getElementById(id);
   const sumIn=$("sumIn"), linesIn=$("linesIn");
+  // cinq clics rapides sur la rondelle du titre
+  let eggN=0, eggT=0;
+  $("puck").addEventListener("click",()=>{
+    const now=Date.now(); eggN=now-eggT<800?eggN+1:1; eggT=now;
+    if(eggN<5) return; eggN=0;
+    const el=$("egg"), pk=$("puck");
+    el.textContent="Free JR"; el.classList.add("on");
+    pk.classList.remove("spin"); void pk.getBoundingClientRect(); pk.classList.add("spin");
+    clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove("on"),4000);
+  });
   const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+  // Pas de divulgâcheur : le pointage d'un match de la ligue ne s'affiche qu'une fois le match vu jusqu'au bout
+  // (ou si on demande à voir tous les pointages). Mémorisé dans ce navigateur.
+  const vus=new Set(); try{JSON.parse(store.get("ushl-sim-vus")||"[]").forEach(id=>vus.add(id))}catch(e){}
+  window.USHL_VUS={
+    vu:id=>!id||vus.has(id)||store.get("ushl-sim-pointages")==="1",
+    tous:()=>store.get("ushl-sim-pointages")==="1",
+    basculer(){if(this.tous())store.del("ushl-sim-pointages");else store.set("ushl-sim-pointages","1");document.dispatchEvent(new Event("ushl-vu"))}
+  };
+  // bouton « Afficher les pointages » : les marques des buts suivent
+  document.addEventListener("ushl-vu",()=>{if(G)$("marks").classList.toggle("cache",!window.USHL_VUS.vu(curGame&&curGame.id))});
+  function markWatched(){
+    if(!curGame||!curGame.id||vus.has(curGame.id)) return;
+    vus.add(curGame.id); store.set("ushl-sim-vus",JSON.stringify([...vus].slice(-5000)));
+    $("marks").classList.remove("cache");
+    document.dispatchEvent(new Event("ushl-vu"));
+  }
   const snapText=htmlToText(LINES_SNAPSHOT).replace(/\n{3,}/g,"\n\n").trim();
   const useSnapshot=newer=>{linesIn.value=snapText;$("linesNote").textContent="(instantané du "+LINES_SNAPSHOT_DATE+(newer?", plus récent que votre dernière version":"")+")"};
   const savedLines=store.get("ushl-sim-lines"), savedSum=store.get("ushl-sim-summary");
@@ -62,7 +88,8 @@ function initUI(){
   function play(game,L){
     // un match récupéré automatiquement porte les trios publiés avec sa simulation
     const lines=game.L||L;
-    try{G=buildGame(game.S,lines,game.raw)}catch(e){console.error(e);$("err").textContent="Le match n’a pas pu être construit : "+e.message;return false}
+    // le match est simulé par morceaux : le début tout de suite, la suite pendant qu'on le regarde
+    try{G=buildGame(game.S,lines,game.raw,{lazy:true});G.advance(Math.min(G.T,45))}catch(e){console.error(e);$("err").textContent="Le match n’a pas pu être construit : "+e.message;return false}
     curRaw=game.raw; curL=game.L?curL:L; curGame=game; $("gamePick").value=String(games.indexOf(game));
     setupGame(); return true;
   }
@@ -93,6 +120,7 @@ function initUI(){
     SIDES.forEach(s=>{
       const tm=G.team[s], cap=s==="away"?"Away":"Home";
       $("n"+cap).textContent=tm.name; $("c"+cap).style.background=luminance(tm.c1)<0.03?tm.c2:tm.c1;
+      $("c"+cap).title=tm.key==="DETROIT"?"Fuck Détroit":"";
     });
     const sc=$("scrub"); sc.max=Math.ceil(G.T); sc.value=0;
     const mk=$("marks"); mk.innerHTML="";
@@ -100,13 +128,15 @@ function initUI(){
     for(let x=1200;x<G.T;x+=1200) addMk(x,"per");
     G.pens.forEach(p=>addMk(p.t,"pen"));
     G.goals.forEach(gg=>addMk(gg.t,"goal",dotColor(G,gg.side)));
+    // les buts ne paraissent sur la ligne du temps qu'une fois le match vu
+    mk.classList.toggle("cache",!window.USHL_VUS.vu(curGame&&curGame.id));
     const d=SIDES.map(s=>{const q=G.diag[s];const nm=G.team[s].name;
       if(!q.hasTeam) return nm+" : trios introuvables, alignement bâti selon le temps de glace";
       return nm+" : "+q.fromLines+" joueur"+(q.fromLines>1?"s":"")+" sur "+q.total+" placés selon les trios, les autres selon le temps de glace";});
     const gaps=(G.shotGaps||[]).map(x=>`${G.team[x.side].abbr} : ${x.joueurs} tirs aux joueurs pour ${x.equipe} à l’équipe, l’écart suit le temps de glace`);
     $("diag").textContent=d.join(". ")+"."+(gaps.length?" Feuille incohérente ("+gaps.join("; ")+").":"")+skippedNote+(curGame&&curGame.note?" "+curGame.note:"");
     $("bsBody").innerHTML=boxScore();
-    buildFeed();
+    feedN=-1;
     renderer.resize(); posMap=new Map(); lastFeedKey=""; lastSecond=-1; freezeUntil=0; freeze=null; trail=[]; mark=null; bannerSticky=false; hideBanner(); $("toast").hidden=true;
     seek(0); playing=false; updatePlayIcon();
   }
@@ -130,14 +160,19 @@ function initUI(){
   });
   function togglePlay(){if(!G)return;if(g>=G.T-0.01){seek(0)}playing=!playing;freezeUntil=0;freeze=null;mark=null;if(playing&&!bannerSticky)hideBanner();updatePlayIcon()}
   function updatePlayIcon(){$("playIcon").innerHTML=playing?'<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>':'<path d="M7 4v16l13-8z"/>';$("bPlay").setAttribute("aria-label",playing?"Pause":"Lecture")}
-  function seek(t){g=clamp(t,0,G.T);hitFx=[];freezeUntil=0;freeze=null;mark=null;trail=[];litUntil={away:0,home:0};bannerSticky=false;hideBanner();$("toast").hidden=true;posMap=new Map();stepPositions(1e9,0);if(g>=G.T-0.01)showFinal();updateUI(true);draw()}
+  // la simulation doit avoir dépassé le moment affiché
+  function ready(t){if(G&&!G.simDone&&G.simT<t)G.advance(Math.min(G.T,t))}
+  function seek(t){g=clamp(t,0,G.T);ready(g+20);hitFx=[];freezeUntil=0;freeze=null;mark=null;trail=[];litUntil={away:0,home:0};bannerSticky=false;hideBanner();$("toast").hidden=true;posMap=new Map();stepPositions(1e9,0);if(g>=G.T-0.01)showFinal();updateUI(true);draw()}
 
   function frame(now){
     const dtR=lastNow?Math.min(0.1,(now-lastNow)/1000):0; lastNow=now;
     if(G&&!$("game").hidden){
+      // suite du match calculée en arrière-plan, un morceau par image
+      if(!G.simDone&&G.simT<g+900) G.advance(G.simT+6);
       if(playing&&now>=freezeUntil){
         if(freeze){freeze=null;mark=null}               // fin de l'arrêt : la rondelle tombe
         let ng=g+dtR*speed;
+        ready(ng+10);
         const crossed=G.stops.filter(s=>s.t>g&&s.t<=ng);
         const hard=crossed.find(s=>!SOFT.has(s.type));
         crossed.filter(s=>SOFT.has(s.type)&&(!hard||s.t<=hard.t)).forEach(s=>showToast(s));
@@ -227,6 +262,7 @@ function initUI(){
   function showBanner(html){const b=$("banner");b.innerHTML=html;b.hidden=false}
   function hideBanner(){$("banner").hidden=true}
   function showFinal(){
+    markWatched();
     const sc=scoreAt(G.T+1); const ot=G.T>3600;
     announce(`Final${ot?" en prolongation":""} : ${G.team.away.name} ${sc.away}, ${G.team.home.name} ${sc.home}${sc.away===sc.home?", match nul":""}.`);
     const stars=G.S.stars.slice(0,3).map(s=>`<li>${"★".repeat(4-s.n)} ${esc2(s.name)} (${esc2(s.abbr)})</li>`).join("");
@@ -262,41 +298,38 @@ function initUI(){
 
   /* Positions des joueurs à l'écran */
   const ease=k=>k*k*(3-2*k);
-  // porte du banc : les joueurs entrent et sortent par là
-  const door=side=>({x:BENCH[side].x,y:-43});
+  // porte du banc (ou du banc des pénalités) : les joueurs entrent et sortent par là
+  const door=(side,p)=>p&&G&&G.boxedAt(side,g).has(p)?{x:(side==="away"?20:-20),y:43}:{x:BENCH[side].x,y:-43};
   function stepPositions(dtG,dtR){
     const tg=targetsAt(G,g), now=performance.now();
     const fz=freeze&&now<freezeUntil?freeze:null;
     const snap=dtG>5||(posMap.size===0&&!fz);
     const seen=new Set();
-    tg.list.forEach(o=>{
+    [...tg.list,...tg.transit].forEach(o=>{
       const id=o.p.id; seen.add(id); let cur=posMap.get(id);
-      if(!cur){const b=snap?{x:o.x,y:o.y}:door(o.side);cur={x:b.x,y:b.y,alpha:1};posMap.set(id,cur);if(fz)fz.from.set(id,{x:b.x,y:b.y})}
-      cur.leaving=false; cur.alpha=1;
+      if(!cur){const b=snap||!fz?{x:o.x,y:o.y}:door(o.side,null);cur={x:b.x,y:b.y,alpha:1};posMap.set(id,cur);if(fz)fz.from.set(id,{x:b.x,y:b.y})}
+      cur.leaving=false;
       if(snap){cur.x=o.x;cur.y=o.y}
       else if(fz){
         // arrêt de jeu : chacun gagne sa place pour la mise au jeu pendant l'arrêt
         const f=fz.from.get(id)||{x:cur.x,y:cur.y};
         const k=ease(clamp((now-fz.start-fz.delay)/Math.max(1,fz.dur*0.85-fz.delay),0,1));
         cur.x=lerp(f.x,o.x,k); cur.y=lerp(f.y,o.y,k);
-      } else if(dtG>0){
-        // vitesse d'un patineur (un peu plus pour qui chasse la rondelle); le porteur reste collé à la rondelle
-        const dx=o.x-cur.x, dy=o.y-cur.y, d=Math.hypot(dx,dy);
-        if(o.carrier&&d<8){cur.x=o.x;cur.y=o.y}
-        else{
-          const kk=1-Math.exp(-dtG*4.5), vmax=(o.role==="G"?20:31)*dtG*(o.carrier||o.receiver?1.35:1);
-          let mx=dx*kk, my=dy*kk; const m=Math.hypot(mx,my); if(m>vmax){mx*=vmax/m;my*=vmax/m}
-          cur.x+=mx; cur.y+=my;
-        }
+      } else {
+        // la partie simulée est enregistrée : chaque joueur est exactement où il était, avec son élan
+        cur.x=o.x; cur.y=o.y;
       }
+      // près de la porte du banc, celui qui sort s'efface et celui qui entre apparaît
+      const dr=door(o.side,null), dd=Math.hypot(cur.x-dr.x,cur.y-dr.y);
+      cur.alpha=o.role!=="G"&&(o.leaving||o.fresh)?clamp(dd/9,0.15,1):1;
       cur.o=o;
     });
-    // joueurs qui sortent de la glace : ils patinent jusqu'à la porte de leur banc et s'effacent
+    // joueurs retirés à un arrêt de jeu (changement, pénalité) : ils patinent jusqu'à la porte et s'effacent
     for(const [id,cur] of [...posMap]){
       if(seen.has(id)) continue;
       if(snap||!cur.o){posMap.delete(id);continue}
-      if(!cur.leaving){cur.leaving=true;cur.o={...cur.o,carrier:false,receiver:false,offside:false}}
-      const dr=door(cur.o.side), dx=dr.x-cur.x, dy=dr.y-cur.y, d=Math.hypot(dx,dy);
+      if(!cur.gone){cur.gone=true;cur.o={...cur.o,carrier:false,receiver:false,offside:false};cur.door=door(cur.o.side,cur.o.p)}
+      const dr=cur.door, dx=dr.x-cur.x, dy=dr.y-cur.y, d=Math.hypot(dx,dy);
       const step=Math.max(31*dtG,45*dtR);
       if(d<=step||d<2){posMap.delete(id);continue}
       cur.x+=dx/d*step; cur.y+=dy/d*step; cur.alpha=clamp(d/18,0.2,1);
@@ -353,12 +386,16 @@ function initUI(){
       case "offside": return `${tag(e.side)}${kind("Hors-jeu")}${e.p?who(e.p,e.side):esc2(G.team[e.side].name)}`;
       case "out": return `${tag(e.side)}${kind("Arrêt")}rondelle hors de la patinoire`;
       case "hit": return `${tag(e.side)}${kind("Mise en échec")}${who(e.p,e.side)} sur ${esc2(e.q?e.q.last:"un adversaire")}`;
+      case "miss": return `${tag(e.side)}${kind("Tir raté")}${who(e.p,e.side)}, à côté du filet`;
+      case "block": return `${tag(e.side)}${kind("Tir bloqué")}${who(e.p,e.side)} bloque le tir de ${esc2(e.q?e.q.last:"")}`;
       case "takeaway": return `${tag(e.side)}${kind("Récupération")}${who(e.p,e.side)}`;
       case "giveaway": return `${tag(e.side)}${kind("Revirement")}${who(e.p,e.side)} perd la rondelle`;
     }
     return "";
   }
+  let feedN=-1;
   function renderFeed(){
+    if(G.plays.length!==feedN){feedN=G.plays.length;buildFeed();lastFeedKey=""}
     // nombre d'éléments déjà joués (recherche dichotomique), le final seulement à la fin
     let lo=0,hi=feedAll.length;
     while(lo<hi){const m=(lo+hi)>>1;if(feedAll[m].t<=g+0.0001)lo=m+1;else hi=m}
@@ -392,6 +429,7 @@ function initUI(){
       ["Tirs au but",s=>cnt(G.shots,s)],
       ["Mises au jeu gagnées",s=>cnt(face,s),true],
       ["Mises en échec",s=>cnt(G.hits,s)],
+      ["Tirs bloqués",s=>cnt(plays("block"),s),true],
       ["Minutes de pénalité",s=>pim(s)],
       ["Avantages numériques",s=>cnt(ppStarts,s),false,s=>`${ppg(s)} en ${cnt(ppStarts,s)}`],
       ["Hors-jeu",s=>cnt(plays("offside"),s),true],
