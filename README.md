@@ -102,7 +102,7 @@ Le site sert parfois une page de vérification anti-robot aux serveurs de GitHub
 1. Fusionnez ces changements dans `main`.
 2. Onglet **Actions** : si GitHub le demande, activez les workflows.
 3. Lancez **Matchs de la ligue** avec **Run workflow**. Le premier passage crée `data/auto/index.js`. Avant le premier match de la saison, la page indique simplement qu'aucun match n'est encore simulé.
-4. Pour avoir des matchs tout de suite, relancez-le en inscrivant `USHL21` dans le champ **archive** : les 93 matchs des séries Y21 sont importés depuis les archives de ushl.ca. Les trios de ces matchs sont ceux de la fin des séries (marqués approximatifs).
+4. Facultatif : le champ **archive** importe les séries d'une saison archivée sur ushl.ca (par exemple `USHL21`). Inutile en cours de saison : ces matchs s'ajouteraient au menu des saisons à côté de la saison en cours.
 
 Rien à changer dans les réglages de GitHub Pages. Si le site ne se met pas à jour après un commit du robot, vérifiez **Settings**, **Pages** : la source doit être la branche `main`.
 
