@@ -17,6 +17,22 @@ function initUI(){
     clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove("on"),4000);
   });
   const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+  // Pas de divulgâcheur : le pointage d'un match de la ligue ne s'affiche qu'une fois le match vu jusqu'au bout
+  // (ou si on demande à voir tous les pointages). Mémorisé dans ce navigateur.
+  const vus=new Set(); try{JSON.parse(store.get("ushl-sim-vus")||"[]").forEach(id=>vus.add(id))}catch(e){}
+  window.USHL_VUS={
+    vu:id=>!id||vus.has(id)||store.get("ushl-sim-pointages")==="1",
+    tous:()=>store.get("ushl-sim-pointages")==="1",
+    basculer(){if(this.tous())store.del("ushl-sim-pointages");else store.set("ushl-sim-pointages","1");document.dispatchEvent(new Event("ushl-vu"))}
+  };
+  // bouton « Afficher les pointages » : les marques des buts suivent
+  document.addEventListener("ushl-vu",()=>{if(G)$("marks").classList.toggle("cache",!window.USHL_VUS.vu(curGame&&curGame.id))});
+  function markWatched(){
+    if(!curGame||!curGame.id||vus.has(curGame.id)) return;
+    vus.add(curGame.id); store.set("ushl-sim-vus",JSON.stringify([...vus].slice(-5000)));
+    $("marks").classList.remove("cache");
+    document.dispatchEvent(new Event("ushl-vu"));
+  }
   const snapText=htmlToText(LINES_SNAPSHOT).replace(/\n{3,}/g,"\n\n").trim();
   const useSnapshot=newer=>{linesIn.value=snapText;$("linesNote").textContent="(instantané du "+LINES_SNAPSHOT_DATE+(newer?", plus récent que votre dernière version":"")+")"};
   const savedLines=store.get("ushl-sim-lines"), savedSum=store.get("ushl-sim-summary");
@@ -111,6 +127,8 @@ function initUI(){
     for(let x=1200;x<G.T;x+=1200) addMk(x,"per");
     G.pens.forEach(p=>addMk(p.t,"pen"));
     G.goals.forEach(gg=>addMk(gg.t,"goal",dotColor(G,gg.side)));
+    // les buts ne paraissent sur la ligne du temps qu'une fois le match vu
+    mk.classList.toggle("cache",!window.USHL_VUS.vu(curGame&&curGame.id));
     const d=SIDES.map(s=>{const q=G.diag[s];const nm=G.team[s].name;
       if(!q.hasTeam) return nm+" : trios introuvables, alignement bâti selon le temps de glace";
       return nm+" : "+q.fromLines+" joueur"+(q.fromLines>1?"s":"")+" sur "+q.total+" placés selon les trios, les autres selon le temps de glace";});
@@ -238,6 +256,7 @@ function initUI(){
   function showBanner(html){const b=$("banner");b.innerHTML=html;b.hidden=false}
   function hideBanner(){$("banner").hidden=true}
   function showFinal(){
+    markWatched();
     const sc=scoreAt(G.T+1); const ot=G.T>3600;
     announce(`Final${ot?" en prolongation":""} : ${G.team.away.name} ${sc.away}, ${G.team.home.name} ${sc.home}${sc.away===sc.home?", match nul":""}.`);
     const stars=G.S.stars.slice(0,3).map(s=>`<li>${"★".repeat(4-s.n)} ${esc2(s.name)} (${esc2(s.abbr)})</li>`).join("");

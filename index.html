@@ -26,7 +26,10 @@
     <section id="autoBox" class="auto" aria-labelledby="autoTitle" hidden>
       <div class="autohead">
         <h2 id="autoTitle">Matchs de la ligue</h2>
-        <label class="ctl" id="autoSeasonWrap" hidden>Saison <select id="autoSeason"></select></label>
+        <div class="autoctl">
+          <button type="button" class="btn small" id="autoScores" aria-pressed="false">Afficher les pointages</button>
+          <label class="ctl" id="autoSeasonWrap" hidden>Saison <select id="autoSeason"></select></label>
+        </div>
       </div>
       <p class="lead" id="autoMeta">Mis à jour automatiquement après chaque simulation.</p>
       <p class="lead" id="autoEmpty" hidden>Aucun match simulé pour l’instant. Les matchs apparaîtront ici d’eux-mêmes après la première simulation de la saison.</p>

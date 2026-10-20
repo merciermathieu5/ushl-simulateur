@@ -40,6 +40,12 @@ function initAuto(){
     $("autoNext").onclick=()=>showGroup(gi+1);
     $("autoNight").onclick=()=>playGroup(0);
     $("manualToggle").onclick=()=>openManual($("manualBox").hidden);
+    // pointages : cachés tant que le match n'a pas été vu, sauf si on demande à tous les voir
+    const sb=$("autoScores");
+    const syncScores=()=>{const on=window.USHL_VUS.tous();sb.setAttribute("aria-pressed",String(on));sb.textContent=on?"Cacher les pointages":"Afficher les pointages"};
+    sb.onclick=()=>window.USHL_VUS.basculer();
+    document.addEventListener("ushl-vu",()=>{syncScores();if(groups.length)showGroup(gi)});
+    syncScores();
     // la saison en cours, ou la plus récente qui a des matchs tant que la saison en cours n'en a pas
     const withGames=seasons.filter(k=>idx.saisons[k].matchs.length);
     const cur=idx.saisons[idx.saison];
@@ -71,11 +77,11 @@ function initAuto(){
     ul.querySelectorAll("button[data-k]").forEach(b=>b.onclick=()=>playGroup(+b.dataset.k));
   }
   function card(m,k){
-    const a=teamInfo(m.v), h=teamInfo(m.l), ot=m.x?(m.x==="OT"?"Prol.":m.x):"";
-    const row=(t,sc,win)=>`<span class="crow${win?" win":""}"><span class="chip" style="background:${luminance(t.c1)<0.03?t.c2:t.c1}"></span><span class="cname">${esc(t.name)}</span><span class="cscore">${sc}</span></span>`;
+    const a=teamInfo(m.v), h=teamInfo(m.l), seen=window.USHL_VUS.vu(m.id), ot=seen&&m.x?(m.x==="OT"?"Prol.":m.x):"";
+    const row=(t,sc,win)=>`<span class="crow${win?" win":""}"><span class="chip" style="background:${luminance(t.c1)<0.03?t.c2:t.c1}"></span><span class="cname">${esc(t.name)}</span>${seen?`<span class="cscore">${sc}</span>`:""}</span>`;
     const notes=[ot,m.tr==="approx"?"Trios approximatifs":m.tr==="aucun"?"Sans trios":"",m.pb?"À vérifier":""].filter(Boolean);
-    const lab=`${a.name} ${m.pv}, ${h.name} ${m.pl}${m.x?", en prolongation":""}. Rejouer ce match.`;
-    return `<li><button type="button" class="gcard" data-k="${k}" aria-label="${esc(lab)}">${row(a,m.pv,m.pv>m.pl)}${row(h,m.pl,m.pl>m.pv)}<span class="cfoot">${esc(notes.join(" · ")||"Final")}</span></button></li>`;
+    const lab=seen?`${a.name} ${m.pv}, ${h.name} ${m.pl}${m.x?", en prolongation":""}. Rejouer ce match.`:`${a.name} à ${h.name}. Pointage caché jusqu’à la fin du match. Voir ce match.`;
+    return `<li><button type="button" class="gcard${seen?"":" avoir"}" data-k="${k}" aria-label="${esc(lab)}">${row(a,m.pv,seen&&m.pv>m.pl)}${row(h,m.pl,seen&&m.pl>m.pv)}<span class="cfoot">${esc(notes.join(" · ")||(seen?"Final":"À voir"))}</span></button></li>`;
   }
 
   // Charge les matchs d'une soirée (pour passer de l'un à l'autre) et lance celui qui a été choisi.
