@@ -26,10 +26,11 @@ function initAuto(){
   }
 
   function start(){
-    const S=idx&&idx.saisons&&idx.saisons[idx.saison];
-    if(!S){openManual(true);if(/^#match=/.test(location.hash))window.USHL_UI.erreur("La liste des matchs de la ligue n’est pas encore disponible.");return}
+    // saisons à montrer : la saison en cours (même sans match) et toute saison qui a des matchs,
+    // par exemple des séries archivées importées avant le premier passage de la saison en cours
+    const seasons=idx&&idx.saisons?Object.keys(idx.saisons).filter(k=>idx.saisons[k].matchs.length||k===idx.saison).sort():[];
+    if(!seasons.length){openManual(true);if(/^#match=/.test(location.hash))window.USHL_UI.erreur("La liste des matchs de la ligue n’est pas encore disponible.");return}
     box.hidden=false;
-    const seasons=Object.keys(idx.saisons).filter(k=>idx.saisons[k].matchs.length||k===idx.saison).sort();
     const sp=$("autoSeason");
     sp.innerHTML=seasons.map(k=>`<option value="${esc(k)}">${esc(seasonLabel(k))}</option>`).join("");
     $("autoSeasonWrap").hidden=seasons.length<2;
@@ -41,7 +42,8 @@ function initAuto(){
     $("manualToggle").onclick=()=>openManual($("manualBox").hidden);
     // la saison en cours, ou la plus récente qui a des matchs tant que la saison en cours n'en a pas
     const withGames=seasons.filter(k=>idx.saisons[k].matchs.length);
-    showSeason(idx.saisons[idx.saison].matchs.length||!withGames.length?idx.saison:withGames[withGames.length-1],false);
+    const cur=idx.saisons[idx.saison];
+    showSeason(cur&&(cur.matchs.length||!withGames.length)?idx.saison:withGames.length?withGames[withGames.length-1]:seasons[0],false);
     if(idx.maj) $("autoMeta").textContent="Mis à jour automatiquement après chaque simulation. Dernière mise à jour : "+new Date(idx.maj).toLocaleString("fr-CA",{dateStyle:"long",timeStyle:"short"})+".";
     openFromHash(); window.addEventListener("hashchange",openFromHash);
   }
