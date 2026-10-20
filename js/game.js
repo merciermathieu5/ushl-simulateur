@@ -6,9 +6,16 @@ function buildGame(S,L,seedText){
   const R=()=>rng();
   const G={S,team:{},roster:{},goalie:{},goalies:{},goalieSwap:{},pulls:[],hits:[],units:{},grp:{},diag:{},goals:[],pens:[],shots:[],segs:[],kfs:[],events:[],stops:[]};
   let pid=0;
+  // Page des alignements (facultative) : numéro de chandail, position et cotes de chaque joueur
+  const rosterOf=side=>((L.roster||{})[S[side]])||{};
+  const info=(side,name)=>rosterOf(side)[norm(name)]||null;
   SIDES.forEach(side=>{
     G.team[side]=teamInfo(S[side]);
-    G.roster[side]=S.players[side].map(p=>({...p,id:"p"+(pid++),side,last:lastName(p.name),pos:L.pos[norm(p.name)]||null}));
+    G.roster[side]=S.players[side].map(p=>{
+      const k=norm(p.name), r=info(side,p.name);
+      return {...p,id:"p"+(pid++),side,last:lastName(p.name),pos:L.pos[k]||(r&&r.pos!=="G"?r.pos:null),
+        num:r?r.num:null,sp:r?r.sp:null,st:r?r.st:null,pc:r?r.pc:null,ex:r?r.ex:null};
+    });
   });
   const other=s=>s==="home"?"away":"home";
 
@@ -22,7 +29,8 @@ function buildGame(S,L,seedText){
     if(!c.length) c=RS.filter(p=>norm(p.name).includes(k));
     if(c.length) return c[0];
     if(!create) return null;
-    const p={name:titleCase(raw.replace(/^[A-Za-z]\.\s*/,"")),g:0,a:0,p:0,pm:0,pim:0,s:0,ht:0,it:10,id:"p"+(pid++),side,last:titleCase(last),pos:null,ghost:true};
+    // joueur absent des statistiques (nom mal orthographié) : il ne joue qu'au moment de son but ou de sa pénalité
+    const p={name:titleCase(raw.replace(/^[A-Za-z]\.\s*/,"")),g:0,a:0,p:0,pm:0,pim:0,s:0,ht:0,it:0,id:"p"+(pid++),side,last:titleCase(last),pos:null,ghost:true};
     RS.push(p); return p;
   }
   function sideOf(code,playerRaw){
@@ -41,16 +49,19 @@ function buildGame(S,L,seedText){
     G.goals.push({t:g.t,per:g.per,sec:g.sec,side,scorer:findPlayer(side,g.scorer),assists:g.assists.map(a=>findPlayer(side,a)).filter(Boolean),tag:g.tag});
   });
   G.goals.sort((a,b)=>a.t-b.t);
-  // Pénalités
+  // Pénalités (celle d'un gardien est purgée par un coéquipier : aucun patineur de plus au banc des pénalités)
+  const goalieNamed=(side,raw)=>{const k=norm((raw||"").replace(/^[A-Za-z]\.\s*/,""));return k?S.goalies.find(g=>sideOf(g.abbr,null)===side&&norm(g.name).endsWith(k)):null};
   S.pens.forEach(p=>{
     const side=sideOf(p.abbr,p.name); if(!side) return;
+    const gk=!findPlayer(side,p.name,false)&&goalieNamed(side,p.name);
     const k=p.kind.toLowerCase();
     let dur=120, label="2 min";
     if(/double/.test(k)){dur=240;label="4 min"}
     else if(/game misconduct|match/.test(k)){dur=/match/.test(k)?300:0;label=/match/.test(k)?"pénalité de match":"inconduite de partie"}
     else if(/misconduct/.test(k)){dur=0;label="10 min, inconduite"}
     else if(/major/.test(k)){dur=300;label="5 min"}
-    G.pens.push({t:p.t,per:p.per,sec:p.sec,side,p:findPlayer(side,p.name),inf:infrFr(p.inf),label,dur,strength:dur>0,misc:dur===0});
+    const pl=gk?null:findPlayer(side,p.name);
+    G.pens.push({t:p.t,per:p.per,sec:p.sec,side,p:pl,who:gk?gk.name:pl?pl.name:titleCase(p.name),inf:infrFr(p.inf),label,dur,strength:dur>0,misc:dur===0});
   });
   G.pens.sort((a,b)=>a.t-b.t);
   // Gardiens
@@ -58,7 +69,7 @@ function buildGame(S,L,seedText){
   S.goalies.forEach(g=>{const s=sideOf(g.abbr,null); if(s) gl[s].push(g); else unassigned.push(g)});
   SIDES.forEach(s=>{if(!gl[s].length&&unassigned.length) gl[s].push(unassigned.shift())});
   SIDES.forEach(s=>{
-    const mk=(g,id)=>({id,side:s,name:g?g.name:"Gardien",last:g?lastName(g.name):"Gardien",grp:"G",stat:g||null});
+    const mk=(g,id)=>{const r=g?info(s,g.name):null;return {id,side:s,name:g?g.name:"Gardien",last:g?lastName(g.name):"Gardien",grp:"G",stat:g||null,num:r?r.num:null}};
     const list=gl[s];
     if(list.length<2){G.goalie[s]=mk(list[0],"g_"+s);G.goalies[s]=[G.goalie[s]];return}
     // Plusieurs gardiens : le partant est celui de la page des trios, sinon le premier listé.
@@ -255,7 +266,9 @@ function buildGame(S,L,seedText){
       const special=st.away.kind!=="ES";
       const len=special?42+R()*20:34+R()*22;
       let e=Math.min(b,cur+len); if(b-e<14) e=b;
-      const seg={a:cur,b:e,line:{},state:st,forced:{away:new Set(),home:new Set()}};
+      // pas de changement de trio dans les 6 secondes qui précèdent un but : le but et ses passes se jouent sur une même présence
+      if(e<b&&G.goals.some(g=>g.t>e&&g.t-e<6&&g.t<=b+0.06)) e=b;
+      const seg={a:cur,b:e,line:{},state:st,forced:{away:new Set(),home:new Set()},free:e<b};   // free : changement de trio ordinaire, sans arrêt de jeu imposé
       SIDES.forEach(side=>{
         const c=ctx[side],k=st[side].kind;
         if(k==="ES"){
@@ -288,135 +301,12 @@ function buildGame(S,L,seedText){
   }
   G.goals.forEach(g=>{const tt=Math.max(perStart(g.t-0.001),g.t-0.3);[g.scorer,...g.assists].forEach(p=>ensureOnIce(g.side,p,tt))});
   G.pens.forEach(p=>{const tt=Math.max(perStart(p.t-0.001),p.t-0.3);const box=G.boxedAt(p.side,tt);if(!box.has(p.p))ensureOnIce(p.side,p.p,tt)});
+  G.ensureOnIce=ensureOnIce;
 
-  // Tirs
-  const periods=[...Array(G.nPer)].map((_,i)=>i+1);
-  const perEnd=per=>Math.min(per*1200,G.T);
-  // Tirs de prolongation : une colonne par prolongation, sinon le total « OT » réparti selon la durée.
-  const otDur=per=>perEnd(per)-(per-1)*1200, otAll=periods.filter(p=>p>3).reduce((a,p)=>a+otDur(p),0);
-  const otCum=per=>periods.filter(p=>p>3&&p<=per).reduce((a,p)=>a+otDur(p),0);
-  const otShare=(total,per)=>Math.round(total*otCum(per)/otAll)-Math.round(total*(otCum(per)-otDur(per))/otAll);
-  const anchors=[...G.goals.map(g=>g.t),...G.pens.map(p=>p.t)];
-  G.goals.forEach(g=>G.shots.push({t:g.t,side:g.side,p:g.scorer,goal:g}));
-  const fallbackTotal=s=>G.roster[s].reduce((a,p)=>a+p.s,0);
-  periods.forEach(per=>{
-    const a=(per-1)*1200, b=perEnd(per);
-    SIDES.forEach(side=>{
-      const row=S.shotRows[side][0];
-      let total;
-      if(!row||row.length<4) total=per<=3?Math.round(fallbackTotal(side)/3):0;
-      else if(per<=3) total=row[per-1]||0;
-      else if(row.length===4) total=0;
-      else if(G.nPer>4&&row.length===G.nPer+1) total=row[per-1]||0;
-      else total=otShare(row[3]||0,per);
-      const gc=G.goals.filter(g=>g.side===side&&g.per===per).length;
-      const n=Math.max(0,total-gc);
-      for(let i=0;i<n;i++){
-        let placed=false;
-        for(let tries=0;tries<60&&!placed;tries++){
-          const span=b-a; const t=span>14?a+8+R()*(span-11):a+R()*span;
-          const ss=stateAt(t)[side], kind=ss.kind; const acc=ss.pulled||kind==="PP"?1:kind==="PK"?0.3:0.65;
-          if(tries<45&&R()>acc) continue;
-          if(G.shots.some(s=>Math.abs(s.t-t)<2.6)) continue;
-          if(G.pulledAt(other(side),t)) continue; // pas de tir au but contre un filet désert
-          if(anchors.some(x=>Math.abs(x-t)<4)) continue;
-          G.shots.push({t,side,p:null,goal:null}); placed=true;
-        }
-      }
-    });
-  });
-  G.shots.sort((a,b)=>a.t-b.t);
-  const rem=new Map(); SIDES.forEach(s=>G.roster[s].forEach(p=>rem.set(p,p.s)));
-  G.goals.forEach(g=>{if(g.scorer)rem.set(g.scorer,Math.max(0,(rem.get(g.scorer)||0)-1))});
-  const wpick=(list,wf)=>{const tot=list.reduce((a,p)=>a+wf(p),0);if(tot<=0)return list[Math.floor(R()*list.length)];let r=R()*tot;for(const p of list){r-=wf(p);if(r<=0)return p}return list[list.length-1]};
-  G.shots.forEach(s=>{
-    if(s.goal) return;
-    const seg=segAt(s.t); const on=seg.line[s.side].map(e=>e.p);
-    let c=on.filter(p=>(rem.get(p)||0)>0), p;
-    if(c.length) p=wpick(c,q=>rem.get(q));
-    else{
-      const boxed=G.boxedAt(s.side,s.t);
-      const g=G.roster[s.side].filter(q=>q.active&&(rem.get(q)||0)>0&&!boxed.has(q));
-      if(g.length){p=wpick(g,q=>rem.get(q));ensureOnIce(s.side,p,s.t)}
-      else p=wpick(on,q=>q.s+1);
-    }
-    s.p=p; rem.set(p,Math.max(0,(rem.get(p)||0)-1));
-  });
-
-  // Trajectoire de la rondelle
+  // Sens d'attaque : on change de côté à chaque période
   G.attackDir=(side,t)=>{const per=Math.min(Math.floor(t/1200)+1,G.nPer);const hd=per%2===0?-1:1;return side==="home"?hd:-hd};
-  const roleOf=(side,p,t)=>{const e=segAt(t).line[side].find(x=>x.p===p);return e?e.role:"C"};
-  const kfs=G.kfs;
-  const clampR=(x,y)=>{x=clamp(x,-96,96);y=clamp(y,-39.5,39.5);const ax=Math.abs(x),ay=Math.abs(y);if(ax>72&&ay>14.5){const cx=Math.sign(x)*72,cy=Math.sign(y)*14.5;const dx=x-cx,dy=y-cy;const d=Math.hypot(dx,dy);if(d>25){x=cx+dx/d*25;y=cy+dy/d*25}}return {x,y}};
-  const push=(t,x,y,side,kind,owner)=>{const p=clampR(x,y);kfs.push({t,x:p.x,y:p.y,side:side||null,kind,owner:owner||null})};
-  let st={x:0,y:0,side:null};
-  const fill=(from,to)=>{
-    let t=from;
-    while(true){
-      const step=2.2+R()*2.6; if(t+step>to-0.7) break; t+=step;
-      if(!st.side||R()<0.33) st.side=R()<0.5?"home":"away";
-      const dir=G.attackDir(st.side,t); const up=dir*st.x;
-      const u=clamp(up-22+R()*55,-80,82); const v=clamp(st.y*0.3-30+R()*60,-36,36);
-      push(t,dir*u,v,st.side,"play"); st.x=kfs[kfs.length-1].x; st.y=kfs[kfs.length-1].y;
-    }
-  };
-  const face=(t0,x,y,hold)=>{push(t0,x,y,null,"face");push(t0+hold,x,y,null,"face");st={x,y,side:null}};
-  periods.forEach(per=>{
-    const a=(per-1)*1200, b=perEnd(per);
-    face(a,0,0,1.5); let cursor=a+1.5;
-    const an=[...G.shots.filter(s=>s.t>a&&s.t<=b).map(s=>({type:"shot",t:s.t,s})),
-              ...G.pens.filter(p=>p.t>=a&&p.t<b).map(p=>({type:"pen",t:p.t,p}))].sort((x,y)=>x.t-y.t);
-    an.forEach(ev=>{
-      if(ev.type==="pen"){
-        if(G.shots.some(s=>Math.abs(s.t-ev.t)<1.2)) return;
-        if(ev.t<=cursor+0.2) return;
-        fill(cursor,ev.t); push(ev.t,st.x,st.y,null,"whistle");
-        const dP=G.attackDir(ev.p.side,ev.t); const fy=R()<0.5?-22:22;
-        face(ev.t+0.05,-dP*69,fy,1.4); cursor=ev.t+1.45; return;
-      }
-      const s=ev.s, dir=G.attackDir(s.side,s.t);
-      // sur un but : deuxième passe, puis première passe, puis le tir du marqueur
-      const plan=[[s.t-8,-12+R()*22,-20+R()*40,null],[s.t-4.5,26+R()*8,-25+R()*50,s.goal&&s.goal.assists[1]||null],[s.t-2,50+R()*24,-28+R()*56,s.goal&&s.goal.assists[0]||null]];
-      const role=roleOf(s.side,s.p,s.t); const isD=role==="LD"||role==="RD";
-      const sv=isD?(R()<0.5?-1:1)*(10+R()*12):-17+R()*34;
-      plan.push([s.t-0.6,isD?55+R()*7:64+R()*15,sv,s.p]);
-      const firstT=plan.find(q=>q[0]>cursor+0.5);
-      if(firstT) fill(cursor,firstT[0]);
-      plan.forEach(([t,u,v,ow])=>{if(t>cursor+0.4){push(t,dir*u,v,s.side,"play",ow);cursor=t}});
-      const ny=-2.5+R()*5;
-      if(s.goal){
-        push(s.t,dir*91.2,ny*0.6,s.side,"goal",s.p);
-        if(s.t<b-0.5){face(s.t+0.06,0,0,1.6);cursor=s.t+1.66}else cursor=s.t;
-      } else {
-        push(s.t,dir*87.6,ny,s.side,"shot",s.p);
-        if(R()<0.45&&s.t+2<b){push(s.t+0.35,dir*86,ny*0.5,null,"save");face(s.t+0.4,dir*69,R()<0.5?-22:22,1.4);cursor=s.t+1.8}
-        else{push(s.t+0.6,dir*(70+R()*14),-28+R()*56,null,"loose");st={x:kfs[kfs.length-1].x,y:kfs[kfs.length-1].y,side:other(s.side)};cursor=s.t+0.6}
-      }
-    });
-    if(cursor<b-0.8) fill(cursor,b);
-    if(!(otGoal&&per===G.nPer)) push(b,st.x,st.y,null,"end");
-  });
-  kfs.sort((a,b)=>a.t-b.t);
-
-  // Mises en échec (colonne HT) : quand le joueur est sur la glace et que l'adversaire a la rondelle
-  const Rh=mulberry32(hashStr((seedText||"x")+"|mises"));
-  const busy=[...G.shots.map(s=>s.t),...G.pens.map(p=>p.t),...periods.map(p=>(p-1)*1200),G.T];
-  SIDES.forEach(side=>G.roster[side].forEach(p=>{
-    if(!p.ht) return;
-    const segs=G.segs.filter(sg=>sg.b-sg.a>6&&sg.line[side].some(e=>e.p===p));
-    const tot=segs.reduce((a,sg)=>a+sg.b-sg.a,0);
-    for(let i=0;i<p.ht&&segs.length;i++){
-      for(let tries=0;tries<40;tries++){
-        let r=Rh()*tot, sg=segs[segs.length-1];
-        for(const x of segs){r-=x.b-x.a;if(r<=0){sg=x;break}}
-        const t=sg.a+2+Rh()*(sg.b-sg.a-4);
-        if(busy.some(x=>Math.abs(x-t)<3)||G.hits.some(h=>Math.abs(h.t-t)<4)) continue;
-        if(tries<30&&puckAt(G,t).side!==other(side)) continue;
-        G.hits.push({t,side,p}); break;
-      }
-    }
-  }));
-  G.hits.sort((a,b)=>a.t-b.t);
+  // Tirs de chaque joueur, trame de jeu (possession, passes, mises au jeu, hors-jeu, dégagements refusés) et mises en échec : js/jeu.js
+  buildPlay(G,R,mulberry32(hashStr((seedText||"x")+"|mises")));
 
   // Événements et arrêts
   G.goals.forEach(g=>{G.events.push({t:g.t,type:"goal",g});G.stops.push({t:g.t,type:"goal",g})});
@@ -425,84 +315,11 @@ function buildGame(S,L,seedText){
   const at=t=>{const per=Math.min(Math.floor(t/1200)+1,G.nPer);return {per,sec:t-(per-1)*1200}};
   G.pulls.forEach(p=>{const ev={t:p.a,type:"pull",side:p.side,...at(p.a)};G.events.push(ev);G.stops.push(ev)});
   SIDES.forEach(s=>{const t=G.goalieSwap[s];if(t===undefined)return;const ev={t,type:"goalie",side:s,out:G.goalies[s][0],in:G.goalies[s][1],...at(t)};G.events.push(ev);G.stops.push(ev)});
+  // coups de sifflet de la trame : arrêt de jeu puis mise au jeu (début de période, buts et fins de période sont déjà là)
+  G.stopsList.forEach(s=>{if(s.cause!=="period"&&s.cause!=="goal"&&s.cause!=="end")G.stops.push({t:s.t,type:"whistle",cause:s.cause,x:s.x,y:s.y,side:s.side,g:s.g,pens:s.pens})});
   G.events.push({t:G.T,type:"final"});
   // à temps égal : l'événement, puis la fin de période, puis le final
   const rank=e=>e.type==="final"?2:e.type==="end"?1:0;
   G.events.sort((a,b)=>a.t-b.t||rank(a)-rank(b)); G.stops.sort((a,b)=>a.t-b.t);
   return G;
 }
-
-/* ---------- Position de la rondelle et des joueurs ---------- */
-function puckAt(G,t){
-  const k=G.kfs; if(!k.length) return {x:0,y:0,side:null,prev:null,next:null};
-  let lo=0,hi=k.length-1;
-  if(t<=k[0].t) return {x:k[0].x,y:k[0].y,side:k[0].side,prev:k[0],next:k[0]};
-  if(t>=k[hi].t) return {x:k[hi].x,y:k[hi].y,side:k[hi].side,prev:k[hi],next:k[hi]};
-  while(hi-lo>1){const m=(lo+hi)>>1;if(k[m].t<=t)lo=m;else hi=m}
-  const a=k[lo],b=k[hi]; let f=(t-a.t)/Math.max(1e-6,b.t-a.t);
-  if(b.kind==="play"||b.kind==="loose") f=f*f*(3-2*f);
-  if(a.kind==="goal"||a.kind==="whistle"||a.kind==="end") f=0;
-  return {x:lerp(a.x,b.x,f),y:lerp(a.y,b.y,f),side:b.side||a.side,prev:a,next:b};
-}
-function targetsAt(G,t){
-  const pk=puckAt(G,t), seg=G.segAt(t), out=[];
-  const faceMode=pk.prev&&pk.next&&pk.prev.kind==="face"&&pk.next.kind==="face";
-  const ownerNext=pk.next&&pk.next.owner&&(pk.next.t-t)<2.6?pk.next.owner:null;
-  SIDES.forEach(side=>{
-    const dir=G.attackDir(side,t); const Ln=seg.line[side]; const off=pk.side===side; const ph0=side==="home"?0:1.7;
-    const arr=[];
-    Ln.forEach((e,i)=>{
-      let x,y; const r=e.role;
-      if(faceMode){
-        const fx=pk.x,fy=pk.y;
-        if(r==="C"){x=fx-dir*2.4;y=fy}
-        else if(r==="LW"||r==="W"){x=fx-dir*4;y=fy-dir*13}
-        else if(r==="RW"){x=fx-dir*4;y=fy+dir*13}
-        else if(r==="X"){x=fx-dir*7;y=fy}
-        else if(r==="LD"){x=fx-dir*19;y=fy-dir*9}
-        else {x=fx-dir*19;y=fy+dir*9}
-      } else if(off){
-        const pu=dir*pk.x,pv=pk.y; let u,v;
-        if(r==="C"){u=pu-8;v=pv*0.45}
-        else if(r==="LW"){u=pu+2;v=lerp(pv,-dir*22,0.65)}
-        else if(r==="RW"||r==="W"){u=pu+2;v=lerp(pv,dir*22,0.65)}
-        else if(r==="X"){u=Math.min(pu+14,80);v=pv*0.2}
-        else if(r==="LD"){u=clamp(pu-35,-78,34);v=lerp(pv*0.3,-dir*16,0.7)}
-        else {u=clamp(pu-35,-78,34);v=lerp(pv*0.3,dir*16,0.7)}
-        x=dir*u;y=v;
-      } else {
-        const dd=-dir; const du=dd*pk.x, pv=pk.y; let u,v;
-        if(r==="C"){u=du-6;v=pv*0.6}
-        else if(r==="LW"||r==="W"){u=du<-25?Math.max(du+28,-55):du-12;v=lerp(pv,-dd*18,0.55)}
-        else if(r==="RW"){u=du<-25?Math.max(du+28,-55):du-12;v=lerp(pv,dd*18,0.55)}
-        else if(r==="X"){u=du-14;v=pv*0.3}
-        else if(r==="LD"){u=clamp(du-20,-84,10);v=lerp(pv*0.5,-dd*10,0.5)}
-        else {u=clamp(du-20,-84,10);v=lerp(pv*0.5,dd*10,0.5)}
-        x=dd*u;y=v;
-      }
-      if(!faceMode){const ph=hashStr(e.p.id)%628/100+ph0;x+=Math.sin(t*0.9+ph)*1.8;y+=Math.cos(t*1.13+ph*1.7)*1.8}
-      arr.push({p:e.p,role:r,side,x,y});
-    });
-    if(off&&!faceMode&&arr.length){
-      let car=ownerNext&&arr.find(o=>o.p===ownerNext);
-      if(!car){let best=1e9;arr.forEach(o=>{const d=Math.hypot(o.x-pk.x,o.y-pk.y)+((o.role==="LD"||o.role==="RD")&&dir*pk.x>20?25:0);if(d<best){best=d;car=o}})}
-      if(car){car.x=pk.x-dir*1.9;car.y=pk.y+0.9;car.carrier=true}
-    }
-    arr.forEach(o=>{const c=clampPos(o.x,o.y);o.x=c.x;o.y=c.y;out.push(o)});
-    const g=G.goalieAt(side,t);
-    if(G.pulledAt(side,t)) out.push({p:g,role:"G",side,x:BENCH[side].x+11,y:BENCH[side].y});
-    else out.push({p:g,role:"G",side,x:-dir*85.6,y:clamp(pk.y*0.12,-3,3)});
-  });
-  // le joueur qui frappe rejoint le porteur de la rondelle adverse
-  const HW=1.6;
-  G.hits.forEach(h=>{
-    const dt=t-h.t; if(dt<-HW||dt>HW) return;
-    const me=out.find(o=>o.p===h.p); if(!me) return;
-    const opp=out.filter(o=>o.side!==h.side&&o.role!=="G"); if(!opp.length) return;
-    const tg=opp.find(o=>o.carrier)||opp.reduce((a,o)=>Math.hypot(o.x-pk.x,o.y-pk.y)<Math.hypot(a.x-pk.x,a.y-pk.y)?o:a);
-    const w=1-Math.abs(dt)/HW, dir=G.attackDir(h.side,t);
-    me.x=lerp(me.x,tg.x-dir*2.4,w); me.y=lerp(me.y,tg.y,w);
-  });
-  return {list:out,puck:pk,seg};
-}
-function clampPos(x,y){x=clamp(x,-97,97);y=clamp(y,-40,40);const ax=Math.abs(x),ay=Math.abs(y);if(ax>72&&ay>14.5){const cx=Math.sign(x)*72,cy=Math.sign(y)*14.5;const dx=x-cx,dy=y-cy;const d=Math.hypot(dx,dy);if(d>25.5){x=cx+dx/d*25.5;y=cy+dy/d*25.5}}return {x,y}}

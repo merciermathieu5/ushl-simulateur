@@ -1,5 +1,5 @@
 "use strict";
-/* Lecture des pages publiées par FHL sur ushl.ca : calendrier, résultats du jour et trios.
+/* Lecture des pages publiées par FHL sur ushl.ca : calendrier, résultats du jour, trios et alignements.
    Fonctions pures, sans accès réseau, utilisées par scripts/recuperer.js et par les tests. */
 
 const TEAM = "[A-Za-z][A-Za-z0-9.]*";
@@ -74,6 +74,42 @@ function linesFor(split, teams) {
   return split.header + blocks.join("") + "\n</HTML>\n";
 }
 
+/* Page des alignements (USHL22Rosters.html) : pour chaque équipe, les joueurs de l'équipe pro
+   avec leur numéro, leur position et leurs cotes. Une ligne :
+   « 95 Steven Stamkos          C R  99    65 86 68 91 87 86 76 77 73 66 79 99 94 81 »
+   colonnes  # Player PO HD CD IJ IT SP ST EN DU DI SK PA PC DF SC EX LD OV (CD et IJ parfois vides).
+   L'équipe de la ligue mineure (« Farm Roster ») est ignorée. */
+const RATINGS = ["it", "sp", "st", "en", "du", "di", "sk", "pa", "pc", "df", "sc", "ex", "ld", "ov"];
+function parseRosters(html) {
+  const out = {};
+  if (!html) return out;
+  const split = splitLines(html);
+  for (const team of split.order) {
+    const pro = split.teams[team].match(/Pro Roster[\s\S]*?<PRE>([\s\S]*?)<\/PRE>/i);
+    if (!pro) continue;
+    const players = [];
+    for (const line of pro[1].split(/\r?\n/)) {
+      const m = line.replace(/ /g, " ").match(/^\s*(\d{1,2})\s+(\S.*?)\s+(C|LW|RW|D|G)\s+([LR])\s+(.*)$/);
+      if (!m) continue;
+      const tail = m[5].trim().split(/\s+/);
+      if (tail.length < RATINGS.length) continue;
+      const p = { num: +m[1], name: m[2].trim(), pos: m[3] };
+      tail.slice(-RATINGS.length).forEach((v, i) => { if (/^\d+$/.test(v)) p[RATINGS[i]] = +v; });
+      players.push(p);
+    }
+    if (players.length) out[team] = players;
+  }
+  return out;
+}
+/* Alignements des deux équipes d'un match, en format compact : [numéro, nom, position, SP, ST, PC, EX]. */
+function rostersFor(parsed, teams) {
+  const out = {};
+  for (const t of teams.map(x => String(x).toUpperCase())) {
+    if (parsed[t]) out[t] = parsed[t].map(p => [p.num, p.name, p.pos, p.sp ?? null, p.st ?? null, p.pc ?? null, p.ex ?? null]);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 /* Équipes de l'en-tête « VISITEUR at LOCAL » d'un sommaire FHL. */
 function summaryTeams(html) {
   if (!html) return null;
@@ -92,4 +128,4 @@ function nextSeason(season) {
   return m ? m[1] + (+m[2] + 1) : null;
 }
 
-module.exports = { parseSchedule, parseTodayGames, splitLines, linesFor, summaryTeams, isFHL, gameId, nextSeason };
+module.exports = { parseSchedule, parseTodayGames, splitLines, linesFor, parseRosters, rostersFor, summaryTeams, isFHL, gameId, nextSeason };

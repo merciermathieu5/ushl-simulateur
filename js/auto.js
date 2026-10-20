@@ -9,9 +9,9 @@ if(typeof document!=="undefined") initAuto();
 function initAuto(){
   const $=id=>document.getElementById(id);
   const box=$("autoBox"); if(!box) return;
-  const cache={}, waiting={};
-  window.USHL_AUTO_MATCH=rec=>{cache[rec.id]=rec;(waiting[rec.id]||[]).forEach(f=>f(rec));delete waiting[rec.id]};
-  let idx=null, season=null, groups=[], gi=0;
+  const cache={};
+  window.USHL_AUTO_MATCH=rec=>{cache[rec.id]=rec};
+  let idx=null, season=null, groups=[], gi=0, ticket=0;
 
   // L'index est chargé avec un paramètre unique pour toujours avoir la liste à jour (cache de GitHub Pages).
   loadScript("data/auto/index.js?t="+Date.now()).then(()=>{idx=window.USHL_AUTO||null;start()},()=>start());
@@ -19,19 +19,19 @@ function initAuto(){
   function loadScript(src){
     return new Promise((ok,ko)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=()=>ko(new Error(src));document.head.appendChild(s)});
   }
+  // le script du match s'exécute avant l'événement « load » : le match est alors dans le cache, sinon le fichier est illisible
   function loadGame(m){
     if(cache[m.id]) return Promise.resolve(cache[m.id]);
-    const p=new Promise(ok=>(waiting[m.id]=waiting[m.id]||[]).push(ok));
-    return loadScript(m.src+"?v="+encodeURIComponent(m.c||"")).then(()=>p);
+    return loadScript(m.src+"?v="+encodeURIComponent(m.c||"")).then(()=>{if(cache[m.id])return cache[m.id];throw new Error("fichier du match illisible")});
   }
 
   function start(){
     const S=idx&&idx.saisons&&idx.saisons[idx.saison];
-    if(!S){openManual(true);return}
+    if(!S){openManual(true);if(/^#match=/.test(location.hash))window.USHL_UI.erreur("La liste des matchs de la ligue n’est pas encore disponible.");return}
     box.hidden=false;
     const seasons=Object.keys(idx.saisons).filter(k=>idx.saisons[k].matchs.length||k===idx.saison).sort();
     const sp=$("autoSeason");
-    sp.innerHTML=seasons.map(k=>`<option value="${k}">${esc(seasonLabel(k))}</option>`).join("");
+    sp.innerHTML=seasons.map(k=>`<option value="${esc(k)}">${esc(seasonLabel(k))}</option>`).join("");
     $("autoSeasonWrap").hidden=seasons.length<2;
     sp.onchange=()=>showSeason(sp.value,true);
     $("autoDay").onchange=e=>showGroup(+e.target.value);
@@ -77,16 +77,30 @@ function initAuto(){
   }
 
   // Charge les matchs d'une soirée (pour passer de l'un à l'autre) et lance celui qui a été choisi.
+  // Un match illisible de la soirée n'empêche pas les autres de jouer.
   async function playGroup(k){
-    const grp=groups[gi];
-    try{
-      const recs=await Promise.all(grp.games.map(loadGame));
-      const list=recs.map((rec,i)=>{
-        const m=grp.games[i];
-        return {raw:rec.sommaire,S:parseSummary(rec.sommaire),L:parseLines(rec.trios?rec.trios.html:""),id:m.id,note:linesNote(rec,m)};
-      });
-      if(window.USHL_UI.jouer(list,k)) setHash("#match="+list[k].id);
-    }catch(e){console.error(e);window.USHL_UI.erreur("Ce match n’a pas pu être chargé ("+e.message+").")}
+    const grp=groups[gi], my=++ticket, want=grp.games[k];
+    const cardEl=document.querySelector(`#autoCards button[data-k="${k}"]`); if(cardEl) cardEl.setAttribute("aria-busy","true");
+    const res=await Promise.allSettled(grp.games.map(loadGame));
+    if(cardEl) cardEl.removeAttribute("aria-busy");
+    if(my!==ticket) return;                          // un autre match a été choisi entre-temps
+    const list=[]; let err=null;
+    res.forEach((r,i)=>{
+      const m=grp.games[i];
+      if(r.status!=="fulfilled"){if(m===want)err=r.reason;return}
+      try{const rec=r.value;list.push({raw:rec.sommaire,S:parseSummary(rec.sommaire),L:linesOf(rec),id:m.id,note:linesNote(rec,m)})}
+      catch(e){if(m===want)err=e}
+    });
+    const i=list.findIndex(x=>x.id===want.id);
+    if(i<0){console.error(err);window.USHL_UI.erreur("Ce match n’a pas pu être chargé ("+(err&&err.message||"fichier illisible")+").");return}
+    if(window.USHL_UI.jouer(list,i)) setHash("#match="+want.id);
+  }
+  // Trios du match, avec les numéros et les cotes de la page des alignements quand elle a été récupérée
+  function linesOf(rec){
+    const L=parseLines(rec.trios?rec.trios.html:"");
+    const eq=rec.alignement&&rec.alignement.equipes;
+    if(eq){L.roster={};Object.entries(eq).forEach(([team,rows])=>{const t=L.roster[team]={};rows.forEach(([num,name,pos,sp,st,pc,ex])=>{t[norm(name)]={num,pos,sp,st,pc,ex}})})}
+    return L;
   }
   // Adresse du match dans la barre d'adresse (impossible depuis le disque : on s'en passe alors).
   function setHash(h){if(location.hash===h)return;try{history.replaceState(null,"",h)}catch(e){}}
@@ -95,12 +109,13 @@ function initAuto(){
     if(!t) return "Trios introuvables pour ce match.";
     const asOf=t.asOf?" ("+frDate(t.asOf)+")":"";
     if(t.qualite==="exact") return "Trios publiés avec cette simulation"+asOf+"."+(m.pb?" Avertissement : "+m.pb+".":"");
-    return "Trios approximatifs : seule une page publiée plus tard"+asOf+" était disponible."+(m.pb?" Avertissement : "+m.pb+".":"");
+    return "Trios approximatifs : la page des trios disponible"+asOf+" ne date pas de cette simulation."+(m.pb?" Avertissement : "+m.pb+".":"");
   }
 
   // Lien direct : #match=USHL22-123
   function openFromHash(){
-    const h=decodeURIComponent(location.hash).match(/^#match=([\w.-]+)$/); if(!h) return;
+    let hash=location.hash; try{hash=decodeURIComponent(hash)}catch(e){}
+    const h=hash.match(/^#match=([\w.-]+)$/); if(!h) return;
     for(const k of Object.keys(idx.saisons)){
       const ms=idx.saisons[k].matchs; const m=ms.find(x=>x.id===h[1]); if(!m) continue;
       if(season!==k) showSeason(k,true);

@@ -1,8 +1,8 @@
 "use strict";
-/* Charge le moteur du site (js/util.js, js/parser.js, js/game.js) dans Node, comme le fait la page,
+/* Charge le moteur du site (js/util.js, js/parser.js, js/game.js, js/jeu.js) dans Node, comme le fait la page,
    pour vérifier qu'un sommaire récupéré se rejoue avant de l'annoncer dans l'interface. */
 const fs = require("fs"), path = require("path"), vm = require("vm");
-const FILES = ["js/util.js", "js/parser.js", "js/game.js"];
+const FILES = ["js/util.js", "js/parser.js", "js/game.js", "js/jeu.js"];
 
 function charger(root) {
   const src = FILES.map(f => fs.readFileSync(path.join(root, f), "utf8").replace(/^"use strict";/, "")).join("\n");

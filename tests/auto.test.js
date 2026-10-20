@@ -21,8 +21,11 @@ function site(files) {
     const name = decodeURIComponent(url.slice(BASE.length)), method = init.method || "GET";
     const ims = init.headers && init.headers["If-Modified-Since"];
     calls.push({ name, method, ims });
-    const f = files[name];
+    const f = files[name] || files["*"];
     if (!f) return new Response(method === "HEAD" ? null : "<html>Page non trouvée</html>", { status: 404 });
+    // réponses particulières : HEAD refusé, pare-feu, panne
+    if (method === "HEAD" && f.headStatus) return new Response(null, { status: f.headStatus });
+    if (f.status) return new Response(method === "HEAD" ? null : f.body, { status: f.status });
     if (ims && Date.parse(f.lm) <= Date.parse(ims)) return new Response(null, { status: 304 });
     return new Response(method === "HEAD" ? null : f.body, { status: 200, headers: { "last-modified": f.lm } });
   };
@@ -65,9 +68,10 @@ function seasonSite(nPlayed, lm, opts = {}) {
   const files = {
     "USHL22Schedule.html": { body: seasonSchedule(nPlayed, opts.scores), lm },
     "USHL22Lines.html": { body: real("USHL21PLFLines.html"), lm: opts.linesLm || lm },
-    "USHL22TodayGames.html": { body: `<HTML><BODY><H2>Latest Results</H2>\n<P>Games of samedi, oct ${23 + nPlayed} 2026</P>\n<A HREF=USHL22${nPlayed}.html> ${nPlayed}   X 1  Y 2 \n</A><BR>\n</BODY></HTML>\n`, lm }
+    "USHL22TodayGames.html": { body: `<HTML><BODY><H2>Latest Results</H2>\n<P>Games of samedi, oct ${23 + nPlayed} 2026</P>\n<A HREF=USHL22${nPlayed}.html> ${nPlayed}   X 1  Y 2 \n</A><BR>\n</BODY></HTML>\n`, lm },
+    "USHL22Rosters.html": { body: real("USHL21PLFRosters.html"), lm }
   };
-  for (let d = 1; d <= nPlayed; d++) if (!(opts.missing || []).includes(d)) files[`USHL22${d}.html`] = { body: real(`USHL21PLF-R4-${d}.html`), lm };
+  for (let d = 1; d <= nPlayed; d++) if (!(opts.missing || []).includes(d)) files[`USHL22${d}.html`] = { body: real(`USHL21PLF-R4-${(opts.swap || {})[d] || d}.html`), lm };
   return files;
 }
 
@@ -180,11 +184,12 @@ test("trios d'une publication antérieure : approximatifs", async () => {
 test("match simulé de nouveau : il est remplacé", async () => {
   const root = workspace();
   await run(root, site(seasonSite(2, "Sat, 24 Oct 2026 02:10:00 GMT")), "2026-10-24T03:00:00Z");
-  const s = site(seasonSite(2, "Sat, 24 Oct 2026 05:00:00 GMT", { scores: { 2: { sa: 5, sh: 6, extra: "OT" } } }));
+  // nouvelle simulation du match 2 : 4-3 en prolongation (le sommaire du 5e match de la finale, mêmes équipes)
+  const s = site(seasonSite(2, "Sat, 24 Oct 2026 05:00:00 GMT", { scores: { 2: { sa: 4, sh: 3, extra: "OT" } }, swap: { 2: 5 } }));
   const r = await run(root, s, "2026-10-24T05:30:00Z");
   assert.deepStrictEqual(r.remplaces, ["USHL22-2"]); assert.deepStrictEqual(r.nouveaux, []);
   const m = readIndex(root).saisons.USHL22.matchs.find(x => x.id === "USHL22-2");
-  assert.deepStrictEqual([m.pv, m.pl, m.x], [5, 6, "OT"]);
+  assert.deepStrictEqual([m.pv, m.pl, m.x, m.pb], [4, 3, "OT", undefined]);
   // seul le match modifié est téléchargé de nouveau
   assert.deepStrictEqual(s.calls.filter(c => /^USHL22\d+\.html$/.test(c.name)).map(c => c.name), ["USHL222.html"]);
 });
@@ -196,8 +201,12 @@ test("sommaire pas encore en ligne : nouvel essai au passage de l'heure suivante
   assert.strictEqual(readIndex(root).saisons.USHL22.attente["USHL22-2"].n, 1);
   // le calendrier n'a pas changé (304) mais le sommaire est maintenant là
   const s = site(seasonSite(2, lm));
+  // moins d'une heure plus tard : pas encore de nouvel essai
   const r2 = await run(root, s, "2026-10-24T03:05:00Z");
-  assert.deepStrictEqual(r2.nouveaux, ["USHL22-2"]);
+  assert.deepStrictEqual(r2.nouveaux, []); assert.ok(!s.calls.some(c => c.name === "USHL222.html"));
+  // une heure plus tard (même si le passage démarre en retard), le sommaire est repris
+  const r3 = await run(root, s, "2026-10-24T03:52:00Z");
+  assert.deepStrictEqual(r3.nouveaux, ["USHL22-2"]);
   assert.deepStrictEqual(readIndex(root).saisons.USHL22.attente, {});
 });
 
@@ -285,12 +294,22 @@ test("page anti-robot au lieu du calendrier : signalée, rien d'écrit", async (
 
 test("chaque match récupéré est rejoué : un écart de pointage est signalé", async () => {
   const root = workspace(), lm = "Sat, 24 Oct 2026 02:10:00 GMT";
-  // le calendrier annonce 9-2 alors que le sommaire donne 4-2
-  const r = await run(root, site(seasonSite(1, lm, { scores: { 1: { sa: 9 } } })), "2026-10-24T03:00:00Z");
-  assert.deepStrictEqual(r.nouveaux, ["USHL22-1"]);
+  // le calendrier annonce 9-2 alors que le sommaire donne 4-2 : sommaire pas encore à jour, nouvel essai plus tard
+  const s = site(seasonSite(1, lm, { scores: { 1: { sa: 9 } } }));
+  const r = await run(root, s, "2026-10-24T03:00:00Z");
+  assert.deepStrictEqual(r.nouveaux, []); assert.ok(r.erreurs.some(e => /USHL22-1/.test(e) && /9-2/.test(e)));
+  assert.strictEqual(readIndex(root).saisons.USHL22.attente["USHL22-1"].n, 1);
+  assert.deepStrictEqual((await run(root, s, "2026-10-24T04:00:00Z")).nouveaux, []);
+  // au troisième essai, le match est gardé et signalé « à vérifier »
+  const r3 = await run(root, s, "2026-10-24T06:00:00Z");
+  assert.deepStrictEqual(r3.nouveaux, ["USHL22-1"]);
   const m = readIndex(root).saisons.USHL22.matchs[0];
   assert.strictEqual(m.pb, "pointage rejoué 4-2, calendrier 9-2");
-  assert.ok(r.erreurs.some(e => /USHL22-1/.test(e)));
+  // le sommaire corrigé remplace ensuite le match, sans l'avertissement
+  const s2 = site(seasonSite(1, "Sat, 24 Oct 2026 07:00:00 GMT"));
+  const r4 = await run(root, s2, "2026-10-24T07:30:00Z");
+  assert.deepStrictEqual(r4.remplaces, ["USHL22-1"]);
+  assert.strictEqual(readIndex(root).saisons.USHL22.matchs[0].pb, undefined);
 });
 
 test("liste des matchs : un match par ligne, relue à l'identique", async () => {
@@ -304,4 +323,107 @@ test("liste des matchs : un match par ligne, relue à l'identique", async () => 
     const c = { window: {} }; vm.runInNewContext(serializeIndex(idx), c);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(c.window.USHL_AUTO)), idx);
   }
+});
+
+/* ---------- Robustesse (revue indépendante) ---------- */
+const VERIF = "<html><head><title>Just a moment...</title></head><body>Please wait while your request is being verified...</body></html>";
+
+test("alignements : numéros et cotes gardés avec chaque match, et lus par le moteur", async () => {
+  const root = workspace(), lm = "Sat, 24 Oct 2026 02:10:00 GMT";
+  await run(root, site(seasonSite(1, lm)), "2026-10-24T02:30:00Z");
+  const rec = loadGame(root, readIndex(root).saisons.USHL22.matchs[0].src);
+  assert.deepStrictEqual(Object.keys(rec.alignement.equipes).sort(), ["MONTREAL", "NASHVILLE"]);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(rec.alignement.equipes.MONTREAL[0])), [95, "Steven Stamkos", "C", 86, 68, 73, 99]);
+  // comme js/auto.js : les trios du match, plus les numéros
+  const L = api.parseLines(rec.trios.html); L.roster = {};
+  Object.entries(rec.alignement.equipes).forEach(([team, rows]) => { const t = L.roster[team] = {}; rows.forEach(([num, name, pos, sp, st, pc, ex]) => { t[name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z]/g, "")] = { num, pos, sp, st, pc, ex }; }); });
+  const G = api.buildGame(api.parseSummary(rec.sommaire), L, rec.sommaire);
+  const stamkos = G.roster.away.find(p => p.name === "Steven Stamkos");
+  assert.strictEqual(stamkos.num, 95); assert.strictEqual(stamkos.sp, 86);
+  assert.ok(G.roster.away.filter(p => p.num != null).length >= 18, "numéros des joueurs du match");
+  assert.ok(G.goalies.away[0].num != null, "numéro du gardien");
+});
+
+test("page anti-robot au milieu des sommaires : ce qui est récupéré est gardé, le reste suit", async () => {
+  const root = workspace(), lm = "Sat, 31 Oct 2026 03:00:00 GMT";
+  const files = seasonSite(7, lm);
+  for (const d of [4, 5, 6, 7]) files[`USHL22${d}.html`] = { body: VERIF, lm };
+  const r1 = await run(root, site(files), "2026-10-31T04:00:00Z");
+  assert.deepStrictEqual(r1.nouveaux, ["USHL22-1", "USHL22-2", "USHL22-3"]); assert.ok(r1.bloque && r1.modifie);
+  const at = readIndex(root).saisons.USHL22.attente;
+  assert.deepStrictEqual(Object.keys(at).sort(), ["USHL22-4", "USHL22-5", "USHL22-6", "USHL22-7"]);
+  assert.ok(Object.values(at).every(a => a.n === 0), "aucun essai compté");
+  // le pare-feu laisse passer au passage suivant
+  const r2 = await run(root, site(seasonSite(7, lm)), "2026-10-31T04:20:00Z");
+  assert.deepStrictEqual(r2.nouveaux, ["USHL22-4", "USHL22-5", "USHL22-6", "USHL22-7"]);
+});
+
+test("pare-feu en 503, panne d'un sommaire, HEAD refusé", async () => {
+  // calendrier : 503 avec la page de vérification, signalé comme blocage et non comme échec
+  const root = workspace(), lm = "Sat, 24 Oct 2026 02:10:00 GMT";
+  await assert.rejects(run(root, site({ "USHL22Schedule.html": { body: VERIF, lm, status: 503 } }), "2026-10-24T03:00:00Z"), e => e.antiRobot === true);
+  // un sommaire en erreur 500 : noté, mis en attente, les autres sont gardés
+  const files = seasonSite(3, lm); files["USHL222.html"] = { body: "erreur", lm, status: 500 };
+  const r = await run(root, site(files), "2026-10-24T03:00:00Z");
+  assert.deepStrictEqual(r.nouveaux, ["USHL22-1", "USHL22-3"]); assert.ok(r.erreurs.some(e => /USHL22-2/.test(e) && /500/.test(e)));
+  assert.strictEqual(readIndex(root).saisons.USHL22.attente["USHL22-2"].n, 1);
+  // serveur qui refuse HEAD (405) : la page est demandée directement
+  const root2 = workspace(), f2 = seasonSite(1, lm); f2["USHL22Schedule.html"].headStatus = 405;
+  assert.deepStrictEqual((await run(root2, site(f2), "2026-10-24T03:00:00Z")).nouveaux, ["USHL22-1"]);
+});
+
+test("page des trios bloquée : les matchs attendent au lieu d'être gardés sans trios", async () => {
+  const root = workspace(), lm = "Sat, 24 Oct 2026 02:10:00 GMT";
+  const files = seasonSite(2, lm); files["USHL22Lines.html"] = { body: VERIF, lm };
+  const r1 = await run(root, site(files), "2026-10-24T03:00:00Z");
+  assert.deepStrictEqual(r1.nouveaux, []); assert.ok(r1.bloque);
+  assert.deepStrictEqual(Object.keys(readIndex(root).saisons.USHL22.attente).sort(), ["USHL22-1", "USHL22-2"]);
+  const r2 = await run(root, site(seasonSite(2, lm)), "2026-10-24T03:20:00Z");
+  assert.deepStrictEqual(r2.nouveaux, ["USHL22-1", "USHL22-2"]);
+  assert.ok(readIndex(root).saisons.USHL22.matchs.every(m => m.tr !== "aucun"));
+});
+
+test("trios exacts pour la dernière soirée seulement, même récupérée en plusieurs passages", async () => {
+  const root = workspace({ maxParPassage: 3 }), lm = "Sat, 31 Oct 2026 03:00:00 GMT", s = site(seasonSite(7, lm));
+  for (const t of ["04:00", "04:20", "04:40"]) await run(root, s, `2026-10-31T${t}:00Z`);
+  assert.deepStrictEqual(readIndex(root).saisons.USHL22.matchs.map(m => m.tr), ["approx", "approx", "approx", "approx", "approx", "approx", "exact"]);
+});
+
+test("nouvelle saison sur le site : pas avant la fin des séries de la saison en cours", async () => {
+  const root = workspace({ saison: "USHL21", types: ["series"] }), lm = LM["USHL21PLF-Round4-Schedule.html"];
+  const r4 = realText("USHL21PLF-Round4-Schedule.html");
+  // finale en cours : deux matchs joués, le reste à venir
+  const enCours = r4.replace(/<A HREF=USHL21PLF-R4-[3-7]\.html>\s*(\d+)\s+(\S+)\s+\d+\s+(\S+)\s+\d+\s*<\/A>(\s*\(OT\))?/g, " $1   $2 at $3");
+  const pending = r => ({ body: `<HTML><TITLE>USHL21PLF League Schedule</TITLE>\n<HTML><BODY><H2>Season Schedule</H2>\nDay 1 <BR>\n 1   MONTREAL at TORONTO${r}<BR>\n</BODY></HTML>`, lm });
+  const files = { "USHL21PLF-Round1-Schedule.html": pending(1), "USHL21PLF-Round2-Schedule.html": pending(2), "USHL21PLF-Round3-Schedule.html": pending(3),
+    "USHL21PLF-Round4-Schedule.html": { body: enCours, lm }, "USHL22Schedule.html": { body: seasonSchedule(0), lm: "Sun, 18 Oct 2026 21:42:28 GMT" } };
+  for (const f of fs.readdirSync(DIR).filter(f => /R4-[12]\.html|Lines|Today|Rosters/.test(f))) files[f] = { body: real(f), lm: LM[f] || lm };
+  const s = site(files);
+  await run(root, s, "2026-07-06T05:00:00Z");
+  assert.strictEqual(readIndex(root).saisons.USHL21.calendriers["USHL21PLF-Round4-Schedule.html"].restants, 5);
+  // le passage de 16 h trouve le calendrier USHL22 : la finale n'est pas finie, on reste sur USHL21
+  const r1 = await run(root, s, "2026-07-06T16:20:00Z", { saisonSuivante: null });
+  assert.strictEqual(r1.saison, "USHL21");
+  // finale terminée : la nouvelle saison est adoptée au passage suivant de 8 h, 12 h ou 16 h
+  files["USHL21PLF-Round4-Schedule.html"] = { body: r4, lm: "Wed, 08 Jul 2026 03:00:00 GMT" };
+  await run(root, s, "2026-07-08T05:00:00Z");
+  assert.strictEqual(readIndex(root).saisons.USHL21.calendriers["USHL21PLF-Round4-Schedule.html"].restants, 0);
+  const r2 = await run(root, s, "2026-07-08T12:40:00Z", { saisonSuivante: null });
+  assert.strictEqual(r2.saison, "USHL22");
+});
+
+test("ronde des séries inexistante servie comme une page ordinaire (fausse 404) : absente, sans erreur", async () => {
+  const root = workspace(), lm = "Sat, 24 Apr 2027 02:10:00 GMT";
+  // saison terminée; le site répond 200 avec sa page d'accueil pour toute adresse inconnue
+  const s = site({ "USHL22Schedule.html": { body: seasonSchedule(7).replace(/ \d+ {3}BOSTON at TORONTO<BR>\n/g, ""), lm }, "*": { body: "<html><title>USHL</title>Accueil</html>", lm } });
+  const r = await run(root, s, "2027-04-24T03:00:00Z");
+  assert.strictEqual(readIndex(root).saisons.USHL22.calendriers["USHL22PLF-Round1-Schedule.html"].absent, true);
+  assert.ok(r.nouveaux.length >= 0);
+});
+
+test("serveur qui ne répond plus : le passage s'arrête après le délai, sans rester bloqué", async () => {
+  const root = workspace();
+  // le minuteur d'AbortSignal.timeout ne retient pas Node : un minuteur ordinaire simule la connexion ouverte
+  const fetch = (url, init) => new Promise((ok, ko) => { const keep = setTimeout(() => {}, 5000); init.signal.addEventListener("abort", () => { clearTimeout(keep); ko(init.signal.reason); }); });
+  await assert.rejects(recuperer({ root, fetch, now: () => new Date("2026-10-24T03:00:00Z"), log: () => {}, pause: 0, saisonSuivante: false, timeout: 50 }), e => e.reseau === true);
 });

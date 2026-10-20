@@ -33,14 +33,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # La branche telle qu'elle est au moment du passage (et non au moment où il a été mis en file) :
+      # un passage qui attendait derrière un autre part de ce que le précédent vient de publier.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # Sort sans erreur et sans rien écrire si le site sert sa page de vérification anti-robot :
-      # le passage suivant réessaie. Une vraie erreur (page inattendue, panne) met le passage en échec.
+      # Page de vérification anti-robot, site en panne ou qui ne répond plus : avertissement sans échec,
+      # ce qui a été récupéré est gardé et le passage suivant reprend le reste. Une page inattendue
+      # (format FHL changé, par exemple) met le passage en échec.
       - name: Récupérer les nouveaux matchs
         id: recup
         env:

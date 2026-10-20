@@ -2,7 +2,7 @@
 // Charge les scripts du site dans un contexte Node isolé, dans l'ordre de index.html.
 const fs=require("fs"), path=require("path"), vm=require("vm");
 const ROOT=path.join(__dirname,"..");
-const FILES=["data/sample-summary.js","data/lines-snapshot.js","js/util.js","js/parser.js","js/game.js","js/share.js"];
+const FILES=["data/sample-summary.js","data/lines-snapshot.js","js/util.js","js/parser.js","js/game.js","js/jeu.js","js/share.js"];
 
 function load(){
   const src=FILES.map(f=>fs.readFileSync(path.join(ROOT,f),"utf8").replace(/^"use strict";/,"")).join("\n");

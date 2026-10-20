@@ -39,6 +39,10 @@ test("un but : la deuxième passe, puis la première, puis le marqueur ont la ro
   const G = api.buildGame(api.parseSummary(raw), L, raw);
   const g = G.goals.find(x => x.assists.length === 2);
   assert.ok(g, "un but avec deux passes");
-  const owners = G.kfs.filter(k => k.kind === "play" && k.owner && k.t > g.t - 6 && k.t < g.t).map(k => k.owner.name);
-  assert.deepStrictEqual(Array.from(owners), [g.assists[1].name, g.assists[0].name, g.scorer.name]);
+  // les deux dernières passes avant le but, puis le tir du marqueur qui entre dans le filet au moment du but
+  const passes = G.script.filter(it => it.k === "pass" && it.t1 <= g.t && it.t0 > g.t - 8);
+  const chain = passes.slice(-2).map(it => [it.from.name, it.to.name]);
+  assert.deepStrictEqual(Array.from(chain, c => Array.from(c)), [[g.assists[1].name, g.assists[0].name], [g.assists[0].name, g.scorer.name]]);
+  const shot = G.script.find(it => it.k === "shot" && it.goal && Math.abs(it.t1 - g.t) < 0.01);
+  assert.ok(shot && shot.p === g.scorer, "tir du marqueur");
 });

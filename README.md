@@ -1,8 +1,8 @@
 # Simulateur de match USHL
 
-Rejoue sur une patinoire animée un match de la ligue USHL ([ushl.ca](https://ushl.ca)) à partir de son sommaire FHL : buts, pénalités, tirs, mises en échec, avantages numériques, gardien retiré et joueurs sur la glace. Une feuille de match complète s'affiche au coup de sifflet final.
+Rejoue sur une patinoire animée un match de la ligue USHL ([ushl.ca](https://ushl.ca)) à partir de son sommaire FHL, à la manière des suivis de match en ligne : la rondelle passe de joueur en joueur, les équipes sortent de leur zone, entrent en zone adverse et tirent, chaque arrêt de jeu est suivi d'une mise au jeu au bon endroit. Buts et passes décisives, tirs de chaque joueur, pénalités, mises en échec, hors-jeu, dégagements refusés, avantages numériques, gardien retiré et joueurs sur la glace (avec leur numéro). Un déroulement détaillé et des statistiques en direct accompagnent la patinoire; la feuille de match complète s'affiche au coup de sifflet final.
 
-Les matchs de la ligue arrivent tout seuls : après chaque simulation, un robot GitHub Actions récupère sur ushl.ca les sommaires de la soirée et les trios publiés avec eux. Il n'y a plus rien à copier-coller. Le collage manuel reste offert.
+Les matchs de la ligue arrivent tout seuls : après chaque simulation, un robot GitHub Actions récupère sur ushl.ca les sommaires de la soirée, les trios et les alignements (numéros de chandail) publiés avec eux. Il n'y a plus rien à copier-coller. Le collage manuel reste offert.
 
 Le site est 100 % statique : aucune compilation, aucun serveur, aucune dépendance à installer. Tout se passe dans le navigateur et rien n'est envoyé ailleurs.
 
@@ -46,6 +46,9 @@ Pendant un match, le bouton **Copier le lien** copie une adresse qui contient le
 
 Pendant la lecture :
 
+- chaque coup de sifflet arrête l'animation un instant : la ligne en cause s'allume (ligne bleue d'un hors-jeu, ligne des buts d'un dégagement refusé), les joueurs gagnent leur place et la rondelle est portée au point de mise au jeu ;
+- le **Déroulement** montre tout le jeu (mises au jeu, tirs, arrêts, mises en échec, revirements) ou seulement les **Faits saillants** (buts, pénalités, fins de période) ;
+- **Sur la glace** donne le numéro de chaque joueur et ses tirs jusqu'ici; **Statistiques du match** compare les deux équipes en direct ;
 - barre d'espace : lecture ou pause ;
 - flèches gauche et droite : reculer ou avancer de 15 secondes ;
 - boutons « précédent » et « suivant » : sauter d'un événement à l'autre ;
@@ -55,15 +58,24 @@ Les buts, pénalités, fins de période et le pointage final sont aussi annoncé
 
 ## Ce que le simulateur reproduit
 
+Le sommaire FHL donne les buts (avec leurs passes), les pénalités, les tirs et les mises en échec de chaque joueur, son temps de glace et les tirs par période. Le simulateur en tire une trame de jeu complète, en suivant les conventions du hockey (règles de la LNH) :
+
+- **Tirs** : chaque joueur a exactement le nombre de tirs de la feuille de match, répartis selon les tirs de son équipe à chaque période et pris pendant ses présences (un peu plus en avantage numérique). Jamais de tir au but contre un filet désert, sauf le but lui-même. Sur une feuille modifiée à la main dont les totaux ne concordent pas, les totaux par période l'emportent et le diagnostic le signale.
+- **Trame de jeu** : sortie de zone (passe à l'ailier le long de la bande, au centre ou défenseur qui contourne son filet), traversée de la zone neutre, entrée en zone en contrôle de la rondelle ou par un dégagement suivi d'une chasse, jeu en zone adverse, revirements. Avant chaque tir, l'équipe s'installe en zone; sur un but, la deuxième passe, puis la première, puis le tir du marqueur. Le gardien immobilise la rondelle ou laisse un retour.
+- **Mises au jeu** au point prévu par la règle : au centre en début de période et après un but; dans la zone de l'équipe du gardien qui immobilise la rondelle, du côté du tir; dans la zone de l'équipe pénalisée; dans la zone de l'équipe qui a dégagé illégalement; au point de la zone neutre devant la zone du hors-jeu, du côté où la rondelle a franchi la ligne; en zone neutre quand l'attaque envoie la rondelle hors de la patinoire. Seuls les deux centres entrent dans le cercle : les ailiers sont sur les lignes de mise au jeu, les défenseurs derrière. Une cinquantaine de mises au jeu par match, comme dans la LNH.
+- **Hors-jeu** : un attaquant franchit la ligne bleue avant la rondelle, le jeu est arrêté. Lors des autres entrées en zone, aucun attaquant ne devance la rondelle. Quatre à huit hors-jeu par match en moyenne.
+- **Dégagements refusés** : rondelle lancée de sa moitié de patinoire jusqu'au-delà de la ligne des buts adverse; permis à l'équipe en désavantage numérique.
+- **Positions** : formations selon la zone et la possession (relance, transition, défenseurs à la pointe, joueur devant le filet, avantage numérique en 1-3-1, désavantage en boîte, couverture du côté du filet, pression sur le porteur).
+- **Changements de trio** : à l'arrêt de jeu le plus proche, sinon à la volée après un dégagement en zone adverse. Les joueurs sortants patinent jusqu'à leur banc.
 - **Prolongation** : en saison, une seule prolongation de 20 minutes à 5 contre 5, et le match nul est possible. En séries, les prolongations de 20 minutes se suivent jusqu'au but. Dans le sommaire, chaque nouvel en-tête « Overtime » (ou « Overtime 2 », « 2nd Overtime ») compte comme une prolongation de plus.
 - **Gardien retiré** : une équipe qui perd par un ou deux buts en fin de 3e période retire son gardien pour un attaquant de plus. Le gardien est toujours retiré avant un but marqué dans un filet désert (EN).
 - **Changement de gardien** : quand une équipe a utilisé deux gardiens, le partant (celui de la page des trios, sinon le premier listé) est remplacé après le dernier but qu'il a accordé, ou à l'entracte le plus proche s'il n'en a accordé aucun.
-- **Mises en échec** : la colonne HT de chaque joueur donne ses mises en échec, placées pendant ses présences quand l'adversaire a la rondelle.
+- **Mises en échec** : la colonne HT de chaque joueur donne ses mises en échec, sur le porteur de la rondelle adverse, par un joueur proche de lui.
 - **Temps de glace** : la colonne IT de la feuille de match guide les présences. Le trio (ou la paire) dont les joueurs manquent le plus de temps de glace saute sur la glace. Un joueur déjà bien au-delà de son temps (blessé en cours de match, par exemple) cède sa place au joueur de sa position qui en manque le plus. Sur les 93 matchs des séries Y21, l'écart moyen est de 1,5 minute par joueur (4 minutes avant ce réglage).
 - **Trios** : comme dans FHL, un attaquant peut figurer dans deux trios (il joue alors les deux) et les unités spéciales prennent les joueurs exacts de la page des trios, attaquant à la pointe compris.
-- **Passes** : sur un but, la deuxième passe touche la rondelle, puis la première, puis le marqueur.
+- **Numéros et vitesse** : la page des alignements donne le numéro de chaque joueur (affiché dans sa pastille) et sa vitesse de patinage (cote SP), qui règle la vitesse du porteur de la rondelle.
 
-Le moment exact des tirs, des présences et des mises en échec n'est pas dans le sommaire : il est tiré au hasard, mais toujours de la même façon pour un même sommaire. Les totaux, eux, respectent le sommaire, et le temps de glace s'en approche.
+Les mises au jeu, hors-jeu, dégagements refusés, revirements et récupérations ne sont pas dans le sommaire FHL : ils sont simulés (marqués d'un astérisque dans les statistiques). Le moment exact des tirs, des présences et des mises en échec non plus : ils sont tirés au hasard, mais toujours de la même façon pour un même sommaire. Les totaux, eux, respectent le sommaire, et le temps de glace s'en approche.
 
 Le dernier sommaire et les derniers trios utilisés sont gardés dans le navigateur (stockage local) et réapparaissent à la prochaine visite.
 
@@ -78,12 +90,12 @@ Le workflow `.github/workflows/matchs.yml` lance `scripts/recuperer.js` :
 
 1. Le calendrier de la saison (`USHL22Schedule.html`) est demandé au serveur avec la date de la dernière version lue. Tant que la ligue ne publie rien, le serveur répond « rien de neuf » et rien n'est téléchargé. Les calendriers des séries ne sont consultés qu'une fois la saison terminée.
 2. Une publication de moins de 10 minutes est laissée au passage suivant : les fichiers d'une simulation n'arrivent pas tous en même temps sur le serveur.
-3. Chaque match joué qui manque est récupéré : son sommaire (`USHL22123.html`, `USHL22PLF-R2-5.html` en séries) et, pour ses deux équipes, la page des trios (`USHL22Lines.html`, `USHL22PLFLines.html` en séries). Le match est rejoué une fois avec le moteur du site : un pointage qui ne concorde pas avec le calendrier est signalé.
+3. Chaque match joué qui manque est récupéré : son sommaire (`USHL22123.html`, `USHL22PLF-R2-5.html` en séries) et, pour ses deux équipes, la page des trios (`USHL22Lines.html`, `USHL22PLFLines.html` en séries) et celle des alignements (`USHL22Rosters.html`, `USHL22PLFRosters.html` en séries) pour les numéros. Le match est rejoué une fois avec le moteur du site : un pointage qui ne concorde pas avec le calendrier (sommaire pas encore à jour, par exemple) fait reprendre le match plus tard; après trois essais, il est gardé et signalé « À vérifier ».
 4. Les matchs sont enregistrés dans `data/auto/` (un fichier par match et la liste `data/auto/index.js`) et commités par le robot. GitHub Pages republie le site.
 
-Un match simulé de nouveau (pointage différent au calendrier) est remplacé. Un sommaire absent est redemandé une fois par heure. La saison suivante (`USHL23Schedule.html`) est détectée toute seule une fois par jour. Rien n'est jamais effacé.
+Un match simulé de nouveau (pointage différent au calendrier) est remplacé. Un sommaire absent est redemandé après 1 h, puis 2 h, 4 h... (24 h au plus entre deux essais). La saison suivante (`USHL23Schedule.html`) est détectée toute seule aux passages de 8 h, 12 h et 16 h (UTC), mais seulement une fois la finale terminée ou la nouvelle saison commencée : des séries en cours ne sont jamais abandonnées. Rien n'est jamais effacé.
 
-Le site sert parfois une page de vérification anti-robot aux serveurs de GitHub. Le passage s'arrête alors sans rien écrire, avec un avertissement dans l'onglet Actions, et le passage suivant réessaie.
+Le site sert parfois une page de vérification anti-robot aux serveurs de GitHub, ou ne répond plus. Les sommaires déjà récupérés sont gardés, le reste attend le passage suivant et un avertissement (pas une erreur) s'affiche dans l'onglet Actions. Chaque requête abandonne après 30 secondes sans réponse.
 
 ### Mise en marche (une seule fois)
 
@@ -109,6 +121,7 @@ GitHub met en pause un workflow planifié après 60 jours sans activité dans le
 | `stabilisationMinutes` | Âge minimal d'une publication avant de la lire |
 | `maxParPassage` | Nombre maximal de sommaires téléchargés par passage |
 | `essaisMax` | Nombre d'essais pour un sommaire absent |
+| `essaisPointage` | Nombre d'essais pour un sommaire dont le pointage ne concorde pas avec le calendrier (3 par défaut) |
 
 Sur votre ordinateur, avec Node.js 22 : `node scripts/recuperer.js` (options : `--archive USHL21`, `--saison-suivante`, `--reessayer`).
 
@@ -148,16 +161,17 @@ index.html               Page principale (structure HTML seulement)
 css/style.css            Styles, thèmes clair et sombre
 js/util.js               Données des équipes, traductions, petites fonctions utilitaires
 js/parser.js             Lecture du sommaire et de la page des trios (HTML ou texte)
-js/game.js               Construction du match : présences, tirs, trajectoire de la rondelle
-js/renderer.js           Dessin de la patinoire et des joueurs sur le canvas
+js/game.js               Construction du match : buts, pénalités, gardiens, présences (temps de glace et trios)
+js/jeu.js                Trame de jeu : tirs de chaque joueur, possession, mises au jeu, hors-jeu, positions
+js/renderer.js           Dessin de la patinoire, des joueurs, de la rondelle et de sa trace sur le canvas
 js/share.js              Liens de partage (sommaire et trios compressés dans l'adresse)
-js/ui.js                 Interface : formulaire, lecture, tableau, présences, déroulement, feuille de match
+js/ui.js                 Interface : formulaire, lecture, arrêts de jeu, tableau, présences, déroulement, statistiques
 js/auto.js               Matchs de la ligue : soirées, cartes des matchs, lien direct #match=
 data/sample-summary.js   Sommaire du match d'exemple
 data/lines-snapshot.js   Instantané de la page « Team Lines »
 data/auto/               Matchs récupérés par le robot (config.json se modifie à la main, le reste est généré)
 scripts/recuperer.js     Récupération des matchs sur ushl.ca
-scripts/fhl.js           Lecture des pages FHL : calendrier, résultats du jour, trios par équipe
+scripts/fhl.js           Lecture des pages FHL : calendrier, résultats du jour, trios et alignements par équipe
 scripts/moteur.js        Moteur du site chargé dans Node pour vérifier chaque match récupéré
 tests/                   Tests automatiques, sommaires de test et vrais fichiers de la finale Y21
 .github/workflows/       Tests à chaque modification (tests.yml) et récupération des matchs (matchs.yml)
@@ -173,7 +187,7 @@ Avec Node.js 22 ou plus récent, sans rien installer :
 node --test
 ```
 
-Les tests vérifient la lecture des sommaires et des trios, la construction des matchs (prolongations, 5 contre 3, gardien retiré, changement de gardien, mises en échec, temps de glace, passes) et les liens de partage. La récupération automatique est éprouvée contre un faux site ushl.ca bâti avec les vrais fichiers de la finale Y21 (`tests/fixtures/auto/finale-y21/`) : soirée simple, publication en cours, plusieurs soirées d'un coup, match simulé de nouveau, sommaire absent, séries, saison archivée, saison suivante et page anti-robot. Ils s'exécutent aussi sur GitHub à chaque modification.
+Les tests vérifient la lecture des sommaires et des trios, la construction des matchs (prolongations, 5 contre 3, gardien retiré, changement de gardien, mises en échec, temps de glace, passes) et les liens de partage. Sur les sept vrais matchs de la finale Y21 et les sommaires de test, la trame de jeu est contrôlée (`tests/jeu.test.js`) : tirs exacts de chaque joueur pendant ses présences, passes décisives dans l'ordre, nombre et emplacement des mises au jeu après chaque sorte d'arrêt, alignement des joueurs au moment de la mise au jeu, hors-jeu et entrées en zone, dégagements refusés, porteur et receveur toujours sur la glace, rondelle sans saut. La récupération automatique est éprouvée contre un faux site ushl.ca bâti avec les vrais fichiers de la finale Y21 (`tests/fixtures/auto/finale-y21/`) : soirée simple, publication en cours, plusieurs soirées d'un coup, match simulé de nouveau, sommaire absent, séries, saison archivée, saison suivante, alignements, page anti-robot (au calendrier, au milieu des sommaires, à la page des trios), pannes du serveur et délai dépassé. Ils s'exécutent aussi sur GitHub à chaque modification.
 
 Le fichier `tests/golden.json` contient l'empreinte du match d'exemple : si une modification change la simulation sans le vouloir, le test échoue. Quand le changement est voulu, régénérez l'empreinte :
 

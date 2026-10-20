@@ -95,12 +95,23 @@
     </div>
     <p class="diag" id="diag"></p>
     <div class="panels">
-      <section class="panel">
+      <section class="panel p-ice">
         <h3>Sur la glace</h3>
         <div class="onice"><div class="oi" id="oiAway"></div><div class="oi" id="oiHome"></div></div>
       </section>
-      <section class="panel">
-        <h3>Déroulement</h3>
+      <section class="panel p-stats">
+        <h3>Statistiques du match</h3>
+        <div class="stats" id="stats"></div>
+        <p class="legend">Tirs, buts, pénalités et mises en échec : feuille de match. * Simulé par l’animation, selon les conventions du hockey.</p>
+      </section>
+      <section class="panel p-feed">
+        <div class="phead">
+          <h3>Déroulement</h3>
+          <div class="seg" role="group" aria-label="Événements affichés">
+            <button class="segb" id="fAll" aria-pressed="true">Tout le jeu</button>
+            <button class="segb" id="fMajor" aria-pressed="false">Faits saillants</button>
+          </div>
+        </div>
         <ol class="feed" id="feed"></ol>
       </section>
     </div>
@@ -116,6 +127,7 @@
 <script src="js/util.js"></script>
 <script src="js/parser.js"></script>
 <script src="js/game.js"></script>
+<script src="js/jeu.js"></script>
 <script src="js/renderer.js"></script>
 <script src="js/share.js"></script>
 <script src="js/ui.js"></script>
