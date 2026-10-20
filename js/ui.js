@@ -6,6 +6,16 @@ if(typeof document!=="undefined") initUI();
 function initUI(){
   const $=id=>document.getElementById(id);
   const sumIn=$("sumIn"), linesIn=$("linesIn");
+  // cinq clics rapides sur la rondelle du titre
+  let eggN=0, eggT=0;
+  $("puck").addEventListener("click",()=>{
+    const now=Date.now(); eggN=now-eggT<800?eggN+1:1; eggT=now;
+    if(eggN<5) return; eggN=0;
+    const el=$("egg"), pk=$("puck");
+    el.textContent="Free JR"; el.classList.add("on");
+    pk.classList.remove("spin"); void pk.getBoundingClientRect(); pk.classList.add("spin");
+    clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove("on"),4000);
+  });
   const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
   const snapText=htmlToText(LINES_SNAPSHOT).replace(/\n{3,}/g,"\n\n").trim();
   const useSnapshot=newer=>{linesIn.value=snapText;$("linesNote").textContent="(instantané du "+LINES_SNAPSHOT_DATE+(newer?", plus récent que votre dernière version":"")+")"};
@@ -93,6 +103,7 @@ function initUI(){
     SIDES.forEach(s=>{
       const tm=G.team[s], cap=s==="away"?"Away":"Home";
       $("n"+cap).textContent=tm.name; $("c"+cap).style.background=luminance(tm.c1)<0.03?tm.c2:tm.c1;
+      $("c"+cap).title=tm.key==="DETROIT"?"Fuck Détroit":"";
     });
     const sc=$("scrub"); sc.max=Math.ceil(G.T); sc.value=0;
     const mk=$("marks"); mk.innerHTML="";

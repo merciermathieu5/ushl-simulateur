@@ -32,6 +32,10 @@ button,select,textarea,input{font:inherit;color:inherit}
 .brand h1{font-family:"Barlow Condensed",Barlow,sans-serif;font-weight:700;font-size:1.75rem;letter-spacing:.01em;margin:0;line-height:1}
 .brand .sub{color:var(--muted);font-size:.95rem}
 .puck{width:30px;height:30px;flex:none}
+.puck.spin{animation:spin .7s ease-out}
+@keyframes spin{to{transform:rotate(720deg)}}
+.egg{margin-left:8px;color:var(--red);font-weight:700;opacity:0;transition:opacity .4s}
+.egg.on{opacity:1}
 .topbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .gamebar{margin:0 0 10px}
 .gamebar select{max-width:min(100%,520px)}
