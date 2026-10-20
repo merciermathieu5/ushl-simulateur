@@ -2,7 +2,7 @@
 "use strict";
 /* Récupération automatique des matchs simulés sur ushl.ca.
 
-   Lancé aux 15 minutes par .github/workflows/matchs.yml, ou à la main :
+   Lancé aux 20 minutes en soirée par .github/workflows/matchs.yml, ou à la main :
        node scripts/recuperer.js
 
    1. Le calendrier de la ligue (USHL22Schedule.html, puis ceux des séries) est demandé avec
@@ -82,7 +82,9 @@ async function recuperer(options) {
   if (archive && !/^[A-Za-z]+\d+$/.test(archive)) throw new Error(`Nom de saison archivée invalide : « ${archive} » (attendu : USHL21, par exemple).`);
   if (archive && !cfg.archive) throw new Error("config.json : l'adresse « archive » est requise pour importer une saison archivée.");
   const base = String(o.base || (archive ? cfg.archive.replace("{saison}", archive) : cfg.base)).replace(/\/?$/, "/");
-  let season = archive || o.saison || idx.saison || cfg.saison;
+  // Saison en cours : la plus récente entre config.json (modifiable à la main) et celle détectée sur le site.
+  const num = k => +(String(k || "").match(/(\d+)$/) || [0, -1])[1];
+  let season = archive || o.saison || (num(idx.saison) > num(cfg.saison) ? idx.saison : cfg.saison);
   const types = archive ? ["series"] : (cfg.types || ["saison", "series"]);
   const now = o.now();
   const sleep = ms => ms > 0 ? new Promise(r => setTimeout(r, ms)) : Promise.resolve();
@@ -156,14 +158,20 @@ async function recuperer(options) {
     if (k && k.pv === g.sa && k.pl === g.sh && (k.x || "") === g.extra) continue;
     todo0.set(id, { id, kind, round, g });
   }
-  // Sommaires absents lors d'un passage précédent : nouvel essai une fois par heure, jusqu'à « essaisMax ».
-  if (now.getUTCMinutes() < 15 || o.reessayer) for (const [id, a] of Object.entries(S.attente)) {
-    if (!todo0.has(id) && a.n < (cfg.essaisMax || 24)) todo0.set(id, { id, kind: a.t, round: a.r, g: a.g });
+  // Matchs en attente : ceux qui n'ont pas encore été tentés (plafond du passage précédent) sont repris tout de suite;
+  // un sommaire absent est redemandé une fois par heure, jusqu'à « essaisMax ».
+  const hourly = now.getUTCMinutes() < 15 || o.reessayer;
+  for (const [id, a] of Object.entries(S.attente)) {
+    if (!todo0.has(id) && (a.n === 0 || (hourly && a.n < (cfg.essaisMax || 24)))) todo0.set(id, { id, kind: a.t, round: a.r, g: a.g });
   }
   let todo = [...todo0.values()];
   todo.sort((a, b) => cmp({ t: a.kind, r: a.round, no: a.g.no }, { t: b.kind, r: b.round, no: b.g.no }));
   const max = cfg.maxParPassage || 150;
-  if (todo.length > max) { o.log(`${todo.length} matchs à récupérer, ${max} dans ce passage, la suite au prochain.`); todo = todo.slice(0, max); }
+  if (todo.length > max) {
+    o.log(`${todo.length} matchs à récupérer, ${max} dans ce passage, la suite au prochain.`);
+    todo.slice(max).forEach(t => { if (!S.attente[t.id]) S.attente[t.id] = { n: 0, t: t.kind, r: t.round, g: t.g }; });
+    todo = todo.slice(0, max);
+  }
 
   /* 3. Trios et date de la soirée, une fois par type de match */
   const extras = {};
@@ -183,7 +191,7 @@ async function recuperer(options) {
   const wait = t => { const a = S.attente[t.id] || { n: 0, t: t.kind, r: t.round, g: t.g }; a.n++; a.g = t.g; S.attente[t.id] = a; };
   for (const t of todo) {
     // un sommaire déjà absent est d'abord vérifié sans télécharger la page d'erreur du site
-    const r = S.attente[t.id] && (await get(t.g.file, { head: true })).status === 404 ? { status: 404 } : await get(t.g.file);
+    const r = S.attente[t.id] && S.attente[t.id].n > 0 && (await get(t.g.file, { head: true })).status === 404 ? { status: 404 } : await get(t.g.file);
     if (r.status === 404) { wait(t); report.manquants.push(t.id); continue; }
     if (!F.isFHL(r.body)) {
       if (ANTI_ROBOT.test(r.body)) throw blocked(base + t.g.file);
@@ -201,18 +209,14 @@ async function recuperer(options) {
   // Qualité des trios : exacts si la page des trios vient de la même publication que le sommaire
   // et que le match est de la dernière soirée de cette publication. Sinon, approximatifs.
   const time = s => (s ? Date.parse(s) : NaN);
-  const lastDay = {};
+  const close = (a, b) => !(Math.abs(time(a) - time(b)) > 36e5);   // à moins d'une heure (ou date inconnue)
+  const order = t => t.round * 1000 + t.g.day;
   let engine = null;
-  fetched.forEach(({ t, lm }) => {
-    const key = t.kind + "|" + Math.round(time(lm) / 36e5);
-    const d = t.round * 1000 + t.g.day;
-    lastDay[key] = Math.max(lastDay[key] || 0, d);
-  });
   for (const { t, body, lm } of fetched) {
     const ex = extras[t.kind], L = ex.lines;
     const html = L ? F.linesFor(L.split, [t.g.away, t.g.home]) : null;
-    const sameUpload = L && Math.abs(time(L.lm) - time(lm)) <= 36e5;
-    const isLast = (t.round * 1000 + t.g.day) === lastDay[t.kind + "|" + Math.round(time(lm) / 36e5)];
+    const sameUpload = L && close(L.lm, lm);
+    const isLast = fetched.every(f => f.t.kind !== t.kind || !close(f.lm, lm) || order(f.t) <= order(t));
     const quality = !html ? "aucun" : sameUpload && isLast ? "exact" : "approx";
     const date = ex.today.files.includes(t.g.file) ? ex.today.date : null;
     const rec = {

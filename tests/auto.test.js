@@ -201,6 +201,33 @@ test("sommaire pas encore en ligne : nouvel essai au passage de l'heure suivante
   assert.deepStrictEqual(readIndex(root).saisons.USHL22.attente, {});
 });
 
+test("plafond par passage : le reste est repris au passage suivant", async () => {
+  const root = workspace({ maxParPassage: 3 }), lm = "Sat, 31 Oct 2026 03:00:00 GMT";
+  const s = site(seasonSite(7, lm));
+  const r1 = await run(root, s, "2026-10-31T04:20:00Z");
+  assert.strictEqual(r1.nouveaux.length, 3);
+  assert.deepStrictEqual(Object.keys(readIndex(root).saisons.USHL22.attente).sort(), ["USHL22-4", "USHL22-5", "USHL22-6", "USHL22-7"]);
+  // le calendrier répond 304 : les matchs en attente sont tout de même repris, sans attendre l'heure
+  const r2 = await run(root, s, "2026-10-31T04:40:00Z");
+  assert.deepStrictEqual(r2.nouveaux, ["USHL22-4", "USHL22-5", "USHL22-6"]);
+  const r3 = await run(root, s, "2026-10-31T05:20:00Z");
+  assert.deepStrictEqual(r3.nouveaux, ["USHL22-7"]);
+  const idx = readIndex(root);
+  assert.strictEqual(idx.saisons.USHL22.matchs.length, 7); assert.deepStrictEqual(idx.saisons.USHL22.attente, {});
+});
+
+test("saison inscrite à la main dans config.json : la plus récente l'emporte", async () => {
+  const root = workspace(), lm = "Sun, 18 Oct 2026 21:42:28 GMT";
+  const s = site({ "USHL22Schedule.html": { body: seasonSchedule(0), lm }, "USHL23Schedule.html": { body: seasonSchedule(0).replace(/USHL22/g, "USHL23"), lm } });
+  await run(root, s, "2026-10-19T12:05:00Z");
+  const cfgPath = path.join(root, "data", "auto", "config.json");
+  fs.writeFileSync(cfgPath, JSON.stringify(Object.assign(JSON.parse(fs.readFileSync(cfgPath, "utf8")), { saison: "USHL23" })));
+  assert.strictEqual((await run(root, s, "2027-09-01T12:05:00Z")).saison, "USHL23");
+  // une saison plus ancienne dans config.json ne fait pas reculer la saison détectée
+  fs.writeFileSync(cfgPath, JSON.stringify(Object.assign(JSON.parse(fs.readFileSync(cfgPath, "utf8")), { saison: "USHL21" })));
+  assert.strictEqual((await run(root, s, "2027-09-01T12:25:00Z")).saison, "USHL23");
+});
+
 test("séries : une ronde n'est consultée que si la précédente existe", async () => {
   const root = workspace({ saison: "USHL21", types: ["series"] });
   const lm = LM["USHL21PLF-Round4-Schedule.html"];
