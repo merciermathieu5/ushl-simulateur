@@ -71,7 +71,7 @@ textarea{width:100%;min-height:300px;resize:vertical;border:1px solid var(--line
 .gcard:hover{border-color:var(--muted);background:var(--surface2)}
 .gcard[aria-busy="true"]{opacity:.6;cursor:progress}
 .crow{display:flex;align-items:center;gap:9px;font-size:1.05rem}
-.crow .chip{width:6px;height:20px;align-self:center}
+.crow .chip{width:6px;height:20px;align-self:center;box-shadow:0 0 0 1px var(--line)}
 .cname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
 .cscore{font-family:"Barlow Condensed",Barlow,sans-serif;font-weight:600;font-size:1.4rem;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--muted)}
 .crow.win .cname,.crow.win .cscore{color:var(--ink);font-weight:700}
