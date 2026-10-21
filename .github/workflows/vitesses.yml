@@ -1,0 +1,48 @@
+name: Cotes de vitesse
+
+# Met à jour data/vitesses.js : la cote SP (vitesse) de chaque patineur de la ligue, d'après le relevé quotidien
+# des alignements fait par l'interface des Sharks (github.com/merciermathieu5/Sharks, data/rosters.json).
+#
+# Le simulateur s'en sert quand un match n'apporte pas sa page des alignements : sommaire collé à la main,
+# lien partagé, match d'exemple. Les matchs de la ligue gardent les cotes publiées avec leur simulation.
+# Rien n'est commité si les cotes n'ont pas changé. Un relevé illisible ou incomplet ne touche à rien.
+on:
+  schedule:
+    - cron: '23 12 * * *'   # après le relevé des Sharks (11 h 50 UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# même file d'attente que le robot des matchs : jamais deux commits en même temps
+concurrency:
+  group: matchs-de-la-ligue
+  cancel-in-progress: false
+
+jobs:
+  cotes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Relire les cotes SP de la ligue
+        run: node scripts/vitesses.js
+
+      - name: Enregistrer si elles ont changé
+        run: |
+          if [ -z "$(git status --porcelain data/vitesses.js)" ]; then
+            echo "Cotes de vitesse inchangées."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/vitesses.js
+          git commit -m "Cotes de vitesse (SP) de la ligue"
+          git push || { git pull --rebase && git push; }

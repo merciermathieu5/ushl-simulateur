@@ -2,10 +2,10 @@
 /* Charge le moteur du site (js/util.js, js/parser.js, js/game.js, js/jeu.js) dans Node, comme le fait la page,
    pour vérifier qu'un sommaire récupéré se rejoue avant de l'annoncer dans l'interface. */
 const fs = require("fs"), path = require("path"), vm = require("vm");
-const FILES = ["js/util.js", "js/parser.js", "js/game.js", "js/jeu.js"];
+const FILES = ["data/vitesses.js", "js/util.js", "js/parser.js", "js/game.js", "js/jeu.js"];
 
 function charger(root) {
-  const src = FILES.map(f => fs.readFileSync(path.join(root, f), "utf8").replace(/^"use strict";/, "")).join("\n");
+  const src = FILES.filter(f => fs.existsSync(path.join(root, f))).map(f => fs.readFileSync(path.join(root, f), "utf8").replace(/^"use strict";/, "")).join("\n");
   const ctx = { console };
   vm.createContext(ctx);
   // Le tout dans une fonction, avec les objets globaux en variables locales : dans un contexte vm, chaque accès
