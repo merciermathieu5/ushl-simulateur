@@ -20,7 +20,7 @@ function frames(G) {
 const live = (G, t) => { const it = G.itemAt(t); return it && it.k !== "dead" && it.k !== "held" };
 function measure(G) {
   const T = G.rec.t, N = T.length, fr = frames(G);
-  const m = { breakPass: 0, breakaways: 0, mates: 0, opps: 0, onGoalie: 0 };
+  const m = { breakPass: 0, breakPassFree: 0, breakaways: 0, mates: 0, opps: 0, onGoalie: 0 };
   // échappée : porteur au-delà de sa ligne bleue (ou presque), aucun adversaire à moins de 8 pi d'être plus près du filet
   const alone = (F, side, me, d) => { const dn = Math.hypot(d * 89 - me.x, me.y); return !F.some(o => !o.g && o.side !== side && Math.hypot(d * 89 - o.x, o.y) < dn + 8) };
   let on = false, st = 0, who = null;
@@ -33,7 +33,7 @@ function measure(G) {
       const nx = G.itemAt(T[k]);
       if (nx && nx.k === "pass" && nx.from === who.p) {
         const d = G.attackDir(who.side, T[k]), F = fr[k], a = F.find(o => o.p === nx.from), b2 = F.find(o => o.p === nx.to);
-        if (a && b2 && Math.hypot(d * 89 - b2.x, b2.y) > Math.hypot(d * 89 - a.x, a.y) + 5) m.breakPass++;
+        if (a && b2 && Math.hypot(d * 89 - b2.x, b2.y) > Math.hypot(d * 89 - a.x, a.y) + 5) { m.breakPass++; if (!nx.seq && !nx.prot) m.breakPassFree++ }
       }
     }
     on = b;
@@ -62,11 +62,13 @@ const all = games.map(measure);
 const shots = games.flatMap(G => G.shots);
 const far = shots.filter(s => s.dist > 80).length, farGoals = shots.filter(s => s.goal && s.dist > 60).length;
 const sum = k => all.reduce((a, m) => a + m[k], 0);
-if (process.env.SHOW) console.log(JSON.stringify({ breakPass: sum("breakPass"), breakaways: sum("breakaways"), mates: sum("mates"), opps: sum("opps"), onGoalie: Math.round(sum("onGoalie")), shots: shots.length, far, farGoals }));
+if (process.env.SHOW) console.log(JSON.stringify({ breakPass: sum("breakPass"), breakPassFree: sum("breakPassFree"), breakaways: sum("breakaways"), mates: sum("mates"), opps: sum("opps"), onGoalie: Math.round(sum("onGoalie")), shots: shots.length, far, farGoals }));
 
 test("échappées rares, et jamais terminées par une passe vers l'arrière", () => {
   assert.ok(sum("breakaways") / games.length <= 12, `${(sum("breakaways") / games.length).toFixed(1)} échappées par match`);
-  assert.ok(sum("breakPass") <= 3, `${sum("breakPass")} échappées terminées par une passe vers l'arrière`);
+  // de son propre chef, jamais; seulement, rarement, quand la feuille de match exige une passe vers le tireur ou le passeur
+  assert.strictEqual(sum("breakPassFree"), 0, `${sum("breakPassFree")} échappées terminées par une passe vers l'arrière`);
+  assert.ok(sum("breakPass") <= games.length, `${sum("breakPass")} échappées terminées par une passe exigée par la feuille`);
 });
 
 test("les joueurs ne restent pas collés les uns aux autres", () => {

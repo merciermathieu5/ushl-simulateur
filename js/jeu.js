@@ -254,6 +254,10 @@ function planHits(G,R){
     const endOf=c=>{const per=c.per||Math.min(Math.floor(c.a/1200)+1,G.nPer);return Math.min(per*1200,G.T)-15};
     const cl=cores.map(c=>({a:c.a,b:Math.min(c.b,endOf(c))})).filter(c=>c.b-c.a>3);
     if(cl.length) cores=cl;
+    // dernière présence du joueur : pas dans ses dernières secondes (il ne resterait plus de temps pour une seconde chance)
+    const lastA=Math.max(...cores.map(c=>c.a));
+    const cl2=cores.map(c=>c.a===lastA?{a:c.a,b:Math.min(c.b,c.a+Math.max(2,(c.b-c.a)*0.5))}:c).filter(c=>c.b-c.a>1.5);
+    if(cl2.length) cores=cl2;
     const tot=cores.reduce((a,c)=>a+c.b-c.a,0);
     for(let i=0;i<p.ht;i++){
       let t=null;
@@ -274,7 +278,7 @@ function planHits(G,R){
 
 /* ---------- La simulation ---------- */
 // Intention d'un joueur. Toutes ont la même forme (le moteur JavaScript les traite alors bien plus vite).
-function ItC(k){this.k=k;this.u=0;this.w=0;this.spd=0.8;this.amp=0;this.until=Infinity;this.q=null;this.gap=0;this.lead=0;this.dep=0;this.du=0;this.dw=0;this.x=0;this.y=0;this.tArr=-1;this.toward=false;this.inside=false;this.keep=false;this.abs=false;this.build=false;this.safe=false;this.ms=0}
+function ItC(k){this.k=k;this.u=0;this.w=0;this.spd=0.8;this.amp=0;this.until=Infinity;this.q=null;this.gap=0;this.lead=0;this.dep=0;this.du=0;this.dw=0;this.x=0;this.y=0;this.tArr=-1;this.toward=false;this.inside=false;this.keep=false;this.abs=false;this.build=false;this.safe=false;this.ms=0;this.pf=0;this.pu0=0;this.pw0=0}
 function It(k,o){const r=new ItC(k);for(const key in o)r[key]=o[key];return r}
 // La simulation avance par morceaux (générateur) : la page peut montrer le début du match pendant que la
 // suite se calcule. L reçoit au fur et à mesure la trame, les arrêts, les jeux et l'enregistrement.
@@ -668,7 +672,8 @@ function* simGen(G,R,Rh,L){
     puck.st="pass";puck.car=null;puck.from=e;puck.to=m;puck.vx=dx/dd*v;puck.vy=dy/dd*v;puck.tArr=t+dd/v;puck.tx=P.x;puck.ty=P.y;puck.seq=!!seq;
     puck.last=e.side;puck.lastE=e;puck.hold=t+0.2;
     puck.rel={side:e.side,u:U(e.side,puck.x),y0:puck.y,t,kind:"pass",sh:shortOf(e.side)};
-    openItem({k:"pass",side:e.side,from:e.p,to:m.p,kind:kind||""});
+    // seq : passe d'une séquence de tir prévue; prot : l'équipe doit garder la rondelle pour un tir prévu
+    openItem({k:"pass",side:e.side,from:e.p,to:m.p,kind:kind||"",seq:!!seq,prot:!!DR.protect[e.side]});
     if(!seq) m.it=It("recv",{x:P.x,y:P.y,tArr:puck.tArr,until:puck.tArr+0.6});
     m.thinkAt=puck.tArr+0.3;
     e.thinkAt=t+0.4+R()*0.4; e.it=null;
@@ -994,23 +999,23 @@ function* simGen(G,R,Rh,L){
         const cands=AT.filter(q=>toNet(q)<30&&!taken(q)).sort((a,b)=>toNet(a)-toNet(b));
         const mine=cands.find(q=>(Wf(s,q.y)>=0?1:-1)===mySide)||cands[0];
         if(mine) return It("mark",{q:mine,gap:2.8,spd:0.9,until:t+0.7+R()*0.5});
-        return It("spot",{u:-78,w:mySide*(mySide===sg?9:6),spd:0.8,amp:1,until:t+0.7+R()*0.6});
+        return It("spot",{u:-78,w:mySide*(mySide===sg?9:6),spd:0.8,amp:1.8,until:t+0.7+R()*0.6,pf:0.15,pu0:pu,pw0:pw});
       }
       if(short){
         // désavantage numérique : le haut de la boîte, déplacé vers la rondelle
         const L=M.filter(q=>q.trk==="F").sort((a,b)=>Wf(s,a.y)-Wf(s,b.y)), k=L.indexOf(e), side2=L.length>1?(k===0?-1:1):sg;
-        return It("spot",{u:-60+(Math.abs(pw)<15?3:0),w:side2*14+sg*4,spd:0.85,amp:1,until:t+0.5+R()*0.5});
+        return It("spot",{u:-60+(Math.abs(pw)<15?3:0),w:side2*14+sg*4,spd:0.85,amp:1.8,until:t+0.5+R()*0.5,pf:0.3,pu0:pu,pw0:pw});
       }
       if(e.role==="C"){
         const sl=AT.filter(q=>U(s,q.x)<-52&&Math.abs(Wf(s,q.y))<20&&!taken(q)).sort((a,b)=>toNet(a)-toNet(b))[0];
         if(sl) return It("mark",{q:sl,gap:3.2,spd:0.9,until:t+0.7+R()*0.5});
-        return It("spot",{u:-68,w:sg*6,spd:0.8,amp:1.5,until:t+0.7+R()*0.6});
+        return It("spot",{u:-68,w:sg*6,spd:0.8,amp:2,until:t+0.7+R()*0.6,pf:0.25,pu0:pu,pw0:pw});
       }
       // ailier : la pointe de son côté, plus près de l'enclave quand la rondelle est de l'autre côté
       const pt=AT.filter(q=>(Wf(s,q.y)>=0?1:-1)===mySide&&U(s,q.x)>-48).sort((a,b)=>U(s,b.x)-U(s,a.x))[0];
-      if(mySide!==sg&&pu<-45) return It("spot",{u:-55,w:mySide*13,spd:0.8,amp:1.5,until:t+0.7+R()*0.6});
+      if(mySide!==sg&&pu<-45) return It("spot",{u:-55,w:mySide*13,spd:0.8,amp:2,until:t+0.7+R()*0.6,pf:0.3,pu0:pu,pw0:pw});
       if(pt) return It("mark",{q:pt,gap:9,toward:true,spd:0.85,until:t+0.7+R()*0.6});
-      return It("spot",{u:-50,w:mySide*20,spd:0.8,amp:2,until:t+0.8+R()*0.6});
+      return It("spot",{u:-50,w:mySide*20,spd:0.8,amp:2.2,until:t+0.8+R()*0.6,pf:0.3,pu0:pu,pw0:pw});
     }
     if(zone==="N"){
       if(isD){
@@ -1108,6 +1113,8 @@ function* simGen(G,R,Rh,L){
       case "door":{const dr=DOOR[s];setT(e,exitX(e),dr.y-1,1);return}
       case "spot":{
         const a=it.amp; let u=it.u, w=it.w, sp=it.spd;
+        // place qui suit la rondelle en partie (couverture en zone défensive)
+        if(it.pf){u+=(d*puck.x-it.pu0)*it.pf;w+=(d*puck.y-it.pw0)*it.pf}
         if(it.safe){const th=deepThreat(e,it.ms);if(th&&th.u-SAFE<u){u=Math.max(-84,th.u-SAFE);w=lerp(w,th.w,0.55);sp=Math.max(sp,0.95)}}
         const q=rinkTo(d*(u+Math.sin(t*0.63+e.ph)*a),d*(w+Math.cos(t*0.81+e.ph*1.7)*a),2.5);
         setT(e,q.x,q.y,sp);return;
@@ -1236,6 +1243,12 @@ function* simGen(G,R,Rh,L){
     const add=(w,f)=>{if(w>0)opts.push({w,f})};
     const doPass=o=>()=>{passTo(e,o.m,o.P,o.v);if(zone==="D"&&U(s,o.P.x)>-RK.BLUE)stat.exits++};
     if(e.leaving){
+      // seul devant le filet : il tire avant d'aller changer (plutôt que de remettre la rondelle derrière lui)
+      const dn=hyp(d*RK.GOAL-e.x,e.y);
+      if(eu>RK.BLUE&&dn<40&&aloneOf(e)){
+        if(allowAttempt) return attempt(e);
+        if(!prot&&dn<26&&GK[A]&&GK[A].mode==="ice") return goaliePoke(e);
+      }
       // il va changer : il se débarrasse de la rondelle (une passe à un coéquipier si son équipe doit la garder)
       const Q=DR.seq&&DR.seq.A===s?DR.seq.actors[DR.seq.k]:null;
       if(Q&&Q!==e&&Q.mode==="ice"){const P0=onsideAim(Q,lead(e,Q,70)), dd=hyp(P0.x-puck.x,P0.y-puck.y);passTo(e,Q,P0,clamp(dd/0.6,35,85),"",true);Q.cmd=It("cmd",{x:P0.x,y:P0.y,tArr:puck.tArr,spd:1,keep:true});return}
@@ -1438,9 +1451,15 @@ function* simGen(G,R,Rh,L){
       const A=puck.from.side, m=puck.to;
       for(const q of SK[otherSide(A)]){
         if(q.stun>t||q.leaving) continue;
-        if(hyp(q.x-puck.x,q.y-puck.y)<2.3){
-          if(DR.protect[A]||puck.seq) continue;
-          if(R()<(DR.want===q.side?1:PJ.intercept)){
+        const dq=hyp(q.x-puck.x,q.y-puck.y);
+        if(dq<2.3){
+          // passe protégée (la feuille de match l'exige) : le défenseur sur sa route s'écarte (bâton levé), elle ne le traverse pas
+          if(DR.protect[A]||puck.seq){
+            const sp=hyp(puck.vx,puck.vy)||1, nx=-puck.vy/sp, ny=puck.vx/sp, side=(q.x-puck.x)*nx+(q.y-puck.y)*ny>=0?1:-1, push=Math.max(0,2.4-dq);
+            q.x+=nx*side*push; q.y+=ny*side*push; continue;
+          }
+          // la rondelle qui arrive sur le corps est presque toujours arrêtée; au bout du bâton, une fois sur deux
+          if(R()<(DR.want===q.side?1:dq<1.4?0.85:PJ.intercept)){
             const passer=puck.from;
             if(R()<PJ.logGive) plays.push({t,type:"giveaway",side:A,p:passer.p});
             gain(q,"intercept"); return;
@@ -1530,7 +1549,10 @@ function* simGen(G,R,Rh,L){
   function retryHit(h,delay){
     h.active=false; h.tries++; hitDirty=true; if(h.tries>60){h.done=true;h.gaveUp=true;return}
     const c=(G.cores.get(h.p)||[]).find(x=>x.b>t+delay+2);
-    h.t=c?Math.max(t+delay,c.a+2)+Rh()*4:t+delay+Rh()*2;
+    // dans la prochaine présence, assez tôt pour qu'elle ne finisse pas avant (une courte présence compte aussi)
+    h.t=c?Math.min(Math.max(t+delay,c.a+2)+Rh()*4,Math.max(t+0.5,c.a+1,c.b-4)):t+delay+Rh()*2;
+    // fin du match toute proche (sirène ou but en prolongation, connus d'avance) : on réessaie tout de suite
+    if(G.T-t<45) h.t=Math.min(h.t,t+0.5+Rh());
   }
   let lastRel={e:null,t:-9};
   function hitsTick(){
@@ -1544,7 +1566,7 @@ function* simGen(G,R,Rh,L){
       const e=ents.get(h.p);
       if(!e||e.mode!=="ice"||e.leaving||isActor(e)||e.hunt||e===puck.car||puck.st==="dead"){if(t>h.t+8)retryHit(h,4);continue}
       // dernière présence prévue du joueur : il saisit la première occasion
-      const lastChance=!(G.cores.get(h.p)||[]).some(c=>c.a>t+1);
+      const lastChance=!(G.cores.get(h.p)||[]).some(c=>c.a>t+1)||G.T-t<45;
       const late=t>h.t+6||(h.tries>=4&&t>=h.t)||(lastChance&&t>=h.t-4), reachD=lastChance?45:32;
       let best=null,bs=-1e9;
       SK[otherSide(e.side)].forEach(q=>{
