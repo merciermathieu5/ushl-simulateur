@@ -422,9 +422,12 @@ function* simGen(G,R,Rh,L){
   }
   // Le banc est long : chacun en sort et y rentre à sa place, pas tous par le même point.
   const exitX=e=>DOOR[e.side].x+(e.ph/6.283-0.5)*12;
+  // (toujours du côté de la zone neutre : la porte est tout près de la ligne bleue, et celui qui saute sur la glace
+  // ne doit pas se retrouver hors-jeu)
+  const nzX=x=>x<0?Math.max(x,-(RK.BLUE-1.5)):Math.min(x,RK.BLUE-1.5);
   function benchX(s){
-    const dr=DOOR[s]; let bx=dr.x, bd=-1;
-    for(let k=0;k<5;k++){const x=dr.x+(R()-0.5)*14;let m=99;for(const q of SK[s]){const dd=hyp(q.x-x,q.y-dr.y);if(dd<m)m=dd}if(m>bd){bd=m;bx=x}}
+    const dr=DOOR[s], cx=(dr.x<0?-1:1)*Math.min(Math.abs(dr.x),RK.BLUE-8.5); let bx=cx, bd=-1;
+    for(let k=0;k<5;k++){const x=cx+(R()-0.5)*14;let m=99;for(const q of SK[s]){const dd=hyp(q.x-x,q.y-dr.y);if(dd<m)m=dd}if(m>bd){bd=m;bx=x}}
     return bx;
   }
   const etaDoor=e=>{const dr=doorOf(e);return hyp(e.x-dr.x,e.y-dr.y)/(e.vmax*0.85)+0.8};
@@ -492,7 +495,7 @@ function* simGen(G,R,Rh,L){
         const pool=innNow(s,g,c);
         let k=pool.findIndex(m=>m.role===e.role); if(k<0) k=0;
         const m=pool[k];
-        if(m){const q=entOf(m.p);if(q.mode==="transit")hide(q);q.x=lerp(e.x,benchX(s),0.5);q.y=dr.y+0.5;q.vx=(R()-0.5)*5;q.vy=8;onIce(q,m.role,m.trk);q.thinkAt=t+0.15}
+        if(m){const q=entOf(m.p);if(q.mode==="transit")hide(q);q.x=nzX(lerp(e.x,benchX(s),0.5));q.y=dr.y+0.5;q.vx=(R()-0.5)*5;q.vy=8;onIce(q,m.role,m.trk);q.thinkAt=t+0.15}
       }
     });
     if(c.out.every(e=>e.mode!=="ice")) finishChange(s,g);
@@ -754,6 +757,11 @@ function* simGen(G,R,Rh,L){
       if(d*puck.x<=RK.BLUE&&d*sp.x>RK.BLUE-0.1&&!mayEnter(e)){
         // il attend à la ligne bleue : la rondelle reste dehors, le porteur aussi
         const back=d*sp.x-(RK.BLUE-0.1); sp={x:sp.x-d*back,y:sp.y}; e.x-=d*back; if(d*e.vx>0)e.vx=0;
+      }
+      // en zone adverse, il veut y rester : la rondelle ne ressort pas sur sa lancée, il la retient à la ligne bleue
+      // (sortie de la zone, tous ses coéquipiers devraient en ressortir avant d'y revenir)
+      else if(d*puck.x>RK.BLUE&&d*sp.x<RK.BLUE+0.1&&d*e.tgx>RK.BLUE+1){
+        const fwd=RK.BLUE+0.1-d*sp.x; sp={x:sp.x+d*fwd,y:sp.y}; e.x+=d*fwd; if(d*e.vx<0)e.vx=0;
       }
       puck.vx=(sp.x-puck.x)/dt;puck.vy=(sp.y-puck.y)/dt;puck.x=sp.x;puck.y=sp.y;return;
     }
@@ -1212,6 +1220,10 @@ function* simGen(G,R,Rh,L){
       if(eu>RK.BLUE&&pu<=RK.BLUE+1&&offM.some(q=>q!==m)) sc-=0.7;     // ressortir la rondelle de la zone : les attaquants devront en sortir
       if(zoneOf(eu)==="O"&&pu>65&&Math.abs(pw)<12) sc+=0.25;       // passe vers l'enclave
       if(clear&&hyp(nx-P.x,P.y)>dn+6) sc-=0.6;                      // champ libre : pas de passe vers l'arrière
+      // passe qui le laisserait seul devant le gardien alors que la feuille de match ne lui laisse plus de tir
+      // dans la période (son échappée finirait à côté du filet) : le passeur voit autre chose
+      // (les adversaires là où ils seront quand la rondelle lui arrivera)
+      if(pu>-14&&pu<RK.GOAL-4&&!shotLeft(m)&&aloneAt(s,P,4,Math.min(1.2,dd/passSpeed(dd)))) sc-=1.2;
       res.push({m,P,v:passSpeed(dd),sc,lane,open,du,dd});
     });
     res.sort((a,b)=>b.sc-a.sc);
@@ -1343,7 +1355,13 @@ function* simGen(G,R,Rh,L){
     e.thinkAt=t+(e.it&&e.it.k==="carry"?Math.min(0.9,e.it.until-t):0.35)+R()*0.25;
   }
   // aucun patineur adverse plus près du filet que lui (avec une marge de gap pieds : 2 par défaut)
-  function aloneOf(e,gap){const nx=dirS[e.side]*RK.GOAL, dn=hyp(nx-e.x,e.y)+(gap||2);for(const q of opps(e)){if(!q.leaving&&hyp(nx-q.x,q.y)<dn)return false}return true}
+  function aloneOf(e,gap){return aloneAt(e.side,e,gap||2)}
+  // en P, un patineur de s aurait chaque adversaire à au moins gap pieds derrière lui dans la course au filet
+  // (tau : les adversaires là où ils seront dans tau secondes). Celui qui va changer compte tant qu'il est sur
+  // la glace : quatre adversaires devant lui en route vers le banc, ce n'est pas une échappée.
+  function aloneAt(s,P,gap,tau){const nx=dirS[s]*RK.GOAL, dn=hyp(nx-P.x,P.y)+gap, k=tau||0;for(const q of SK[otherSide(s)]){if(hyp(nx-q.x-q.vx*k,q.y+q.vy*k)<dn)return false}return true}
+  // la feuille de match lui laisse encore un tir (hors but) plus tard dans la période
+  function shotLeft(e){for(const x of shotsP)if(!x.done&&x.p===e.p&&!x.goal&&x.t>t)return true;return false}
   // seul devant le gardien sans pouvoir tirer (la feuille de match ne compte pas ce tir) : le gardien sort son bâton
   function goaliePoke(e){
     const sy=e.y>=0?1:-1;
@@ -1353,38 +1371,69 @@ function* simGen(G,R,Rh,L){
 
   /* ---------- échappée : le porteur seul devant le gardien tire toujours ----------
      Porteur entre la ligne rouge (ou presque) et le filet, face au filet (pas au fond du coin), chaque patineur adverse
-     à au moins 8 pi derrière lui dans la course au filet, gardien devant son filet. Il fonce au filet et tire : ni passe,
-     ni demi-tour, et personne ne lui enlève la rondelle.
+     à au moins 8 pi derrière lui dans la course au filet (même celui qui s'en va au banc), gardien devant son filet.
+     Il fonce au filet et tire : ni passe, ni demi-tour, et personne ne lui enlève la rondelle. Ses coéquipiers
+     attendent à la ligne bleue qu'il l'ait franchie; s'il reprend son propre retour seul devant le filet, il tire encore.
      Le tir compte comme tir au but quand la feuille de match lui laisse un tir plus tard dans la période (ce tir est
      avancé à l'échappée, sans rien changer aux totaux du joueur, de l'équipe par période ni du gardien); sinon,
-     le tir rate le filet de peu ou frappe le poteau. La feuille passe avant : les passes décisives d'un but prévu
-     se font, et l'équipe qui doit tirer bientôt à l'autre bout récupère la rondelle avant. */
+     le tir rate le filet de peu ou frappe le poteau. Pour que ce soit rare, un passeur ne lance pas seul devant le
+     gardien un coéquipier à qui la feuille ne laisse plus de tir dans la période.
+     La feuille passe avant : les passes décisives d'un but prévu se font, un coéquipier qui doit tirer dans les
+     secondes qui suivent reçoit la rondelle, et l'équipe qui doit tirer bientôt à l'autre bout récupère la rondelle
+     avant. Tout près du filet, le porteur tire quand même d'abord (le retour ira au coéquipier ou à l'adversaire). */
   function breakawayOf(e){
-    // (pas tout de suite après son tir d'échappée : reprendre son propre retour n'est pas une nouvelle échappée)
-    if(t-e.brkEnd<4) return false;
+    // (pas dans la seconde qui suit son tir d'échappée; s'il reprend son retour seul devant le filet, il tire encore)
+    if(t-e.brkEnd<1) return false;
     const s=e.side, d=dirS[s], eu=U(s,e.x), ew=Wf(s,e.y), A=otherSide(s);
     if(eu<=-12||eu>=RK.GOAL-4||(eu>70&&Math.abs(ew)>22)) return false;
     if(hyp(d*RK.GOAL-e.x,e.y)>=104) return false;
     const gk=GK[A]; if(!gk||gk.mode!=="ice"||G.pulledAt(A,t)) return false;
     if(zoneOf(eu)!=="O"&&offsideMates(e).length) return false;
+    // (hors de la zone, un coéquipier lancé qui ne pourra pas s'arrêter avant la ligne bleue : hors-jeu à venir)
+    if(eu<=RK.BLUE&&SK[s].some(q=>q!==e&&onsideStop(q)>RK.BLUE)) return false;
+    // (juste passé la ligne bleue, coéquipiers en zone : il doit y entrer, pas en ressortir)
+    if(eu<RK.BLUE+8&&U(s,e.vx)<3&&offsideMates(e).length) return false;
     // une vraie échappée : chaque patineur adverse est à au moins 8 pi derrière lui dans la course au filet
     return aloneOf(e,8);
   }
+  // Seul devant le gardien, mais un coéquipier est déjà en zone (ou y entre lancé) : il l'attend à la ligne bleue
+  // pendant que le coéquipier en ressort (pas de hors-jeu). L'échappée part ensuite, s'il est encore seul.
+  function tagUp(e){
+    const s=e.side, eu=U(s,e.x), A=otherSide(s);
+    if(e.leaving||eu>RK.BLUE||eu<=-12||t-e.brkEnd<1) return false;
+    const gk=GK[A]; if(!gk||gk.mode!=="ice"||G.pulledAt(A,t)) return false;
+    const off=SK[s].filter(q=>q!==e&&onsideStop(q)>RK.BLUE);
+    if(!off.length||!aloneOf(e,8)||!canBreak(e)) return false;
+    off.forEach(q=>{if(q.cmd||q.leaving)return;q.it=It("spot",{u:Math.min(U(s,q.x),RK.BLUE-4),w:Wf(s,q.y),spd:1,until:t+0.5});q.thinkAt=t+0.4});
+    const q=toXY(s,Math.min(eu+4,RK.BLUE-4),Wf(s,e.y),3);
+    e.it=It("carry",{x:q.x,y:q.y,spd:0.5,until:t+0.3}); e.thinkAt=t+0.3;
+    return true;
+  }
+  // où s'arrêterait ce joueur s'il freinait maintenant (sa position vers le filet adverse, en pieds)
+  function onsideStop(q){const vu=U(q.side,q.vx);return U(q.side,q.x)+(vu>0?vu*vu/24+vu*0.25:0)}
   function canBreak(e){
-    const s=e.side, A=otherSide(s);
-    if(DR.want===A) return false;
-    // but prévu de son équipe (passes décisives, moment exact) ou tir d'un coéquipier tout de suite : le réalisateur s'en charge
+    const s=e.side, A=otherSide(s), dNet=hyp(dirS[s]*RK.GOAL-e.x,e.y);
+    // l'adversaire doit reprendre la rondelle pour un tir prévu : seul tout près du filet, il tire tout de suite
+    // (la rondelle part alors vers l'adversaire); plus loin, il la perd en route
+    if(DR.want===A&&dNet>=35) return false;
+    // but prévu de son équipe (passes décisives, moment exact) : le réalisateur s'en charge
     if(DR.seq&&DR.seq.A===s&&DR.seq.goal) return false;
-    // (son propre tir prévu dans les 6 secondes : le réalisateur le fait partir à la seconde près, au filet; celui d'un
-    // coéquipier dans les 8 secondes : la rondelle doit lui revenir)
     for(const x of shotsP){
       if(x.done||x.t<=t-0.2) continue;
-      if(x.side===A){if(x.t-t<9)return false;continue}
-      if(x.goal&&x.t-t<12) return false;
-      if(x.t-t<(x.p===e.p?6:8)) return false;
+      if(x.t-t>=12) break;
+      if(x.side===A){if(x.t-t<9&&dNet>=35)return false;continue}
+      if(x.goal) return false;
+      // son propre tir prévu dans les 6 secondes : l'échappée le prend (avancé à son tir), sinon le réalisateur
+      // le fait partir à la seconde près
+      if(x.p===e.p){if(x.t-t<6&&movableShot(e,t+breakEta(e,dNet))!==x)return false;continue}
+      // tir d'un coéquipier dans les 8 secondes : la rondelle doit lui revenir. Tout près du filet, il tire tout de
+      // suite et le retour a le temps d'aller au coéquipier; plus loin, le réalisateur garde la main
+      if(x.t-t<8&&!(dNet<30&&x.t-t>=3.5)) return false;
     }
     return true;
   }
+  // moment approximatif de son tir d'échappée (il tire vers 18 pi du filet), en secondes
+  function breakEta(e,dNet){return Math.max(0.3,(dNet-18)/(e.vmax*0.9))+0.2}
   function startBreak(e){
     const s=e.side, S=DR.seq;
     // far : partie de loin (une vraie course vers le gardien, annoncée dans le déroulement), sinon seul près du filet
@@ -1393,16 +1442,25 @@ function* simGen(G,R,Rh,L){
     // il était passeur d'une séquence prévue : elle se fera sans lui; il était le tireur : son tir part de l'échappée
     if(S&&S.A===s&&S.actors.includes(e)){if(S.actors[S.actors.length-1]===e)endSeq();else shortSeq(S)}
     e.cmd=null; dropHunt(e);
+    // (pas d'erreur de hors-jeu pendant une échappée : ses coéquipiers attendent la rondelle à la ligne bleue)
+    for(const q of SK[s]) q.fly=0;
   }
   function breakTick(e){
     const s=e.side, d=dirS[s], A=otherSide(s), b=e.brk, eu=U(s,e.x), dNet=hyp(d*RK.GOAL-e.x,e.y);
-    // un coéquipier est entré en zone avant lui : ce n'est plus une échappée (la rondelle ne peut pas y entrer)
+    // ses coéquipiers attendent à la ligne bleue qu'il l'ait franchie (pas de hors-jeu)
+    if(eu<=RK.BLUE+1) for(const q of SK[s]){
+      if(q===e||q.leaving||q.cmd) continue;
+      if(onsideStop(q)>RK.BLUE-4){q.it=It("spot",{u:Math.min(U(s,q.x),RK.BLUE-3),w:Wf(s,q.y),spd:0.9,until:t+0.5});q.thinkAt=t+0.4}
+    }
+    // un coéquipier est quand même entré en zone avant lui : ce n'est plus une échappée (la rondelle ne peut pas y entrer)
     if(eu<=RK.BLUE&&offsideMates(e).length){e.brk=null;e.thinkAt=t;return carrierThink(e)}
     // assez près, poursuivant sur le dos, coup de sifflet ou sirène tout proches, ou l'adversaire doit reprendre la rondelle : il tire
     const pr=nearestOf(opps(e),e.x,e.y).d;
     // (de même si un tir prévu de son équipe approche : le sien, ou celui d'un coéquipier qui suivra sur le retour)
     const soon=shotsP.some(x=>!x.done&&x.side===s&&x.t>t-0.2&&x.t-t<(x.p===e.p?0.6:2.6));
-    const now=dNet<=b.dist||eu>=RK.GOAL-6||(pr<5&&dNet<48)||pb-t<1.6||DR.want===A||t-b.t0>6||soon||
+    // (l'adversaire doit tirer bientôt à l'autre bout : il tire tout de suite)
+    const rush=DR.want===A||shotsP.some(x=>!x.done&&x.side===A&&x.t>t-0.2&&x.t-t<9);
+    const now=dNet<=b.dist||eu>=RK.GOAL-6||(pr<5&&dNet<48)||pb-t<1.6||rush||t-b.t0>6||soon||
       pensP.some(p=>!p.done&&p.t>t&&p.t-t<1.3)||!GK[A]||GK[A].mode!=="ice";
     if(now&&t-b.t0>=0.25){breakShot(e);return}
     // il fonce au filet, un peu du côté de son lancer
@@ -1442,7 +1500,8 @@ function* simGen(G,R,Rh,L){
     if(DR.seq&&DR.seq.sh===sh) endSeq();
     const dist=hyp(d*RK.GOAL-puck.x,puck.y), r=R();
     stat.brOnGoal=(stat.brOnGoal||0)+1;
-    fire(e,sh,net,dist<=12?(r<0.5?"back":"wrist"):r<0.55?"wrist":r<0.85?"snap":"back");
+    // (seul devant le gardien, il tire du coup droit ou du revers, même de tout près : ni déviation ni tour du filet)
+    fire(e,sh,net,dist<=12?(r<0.5?"back":"wrist"):r<0.55?"wrist":r<0.85?"snap":"back",true);
   }
   // le tir rate le filet de peu, ou frappe le poteau
   function breakMiss(e,far){
@@ -1478,6 +1537,8 @@ function* simGen(G,R,Rh,L){
       const q=ALL[j], ddx=e.x-q.x, ddy=e.y-q.y; if(ddx>5.5||ddx<-5.5||ddy>5.5||ddy<-5.5) continue;
       const mine=q.side===e.side, dd=Math.sqrt(ddx*ddx+ddy*ddy);
       if(dd<1e-4) continue;
+      // (celui qui va mettre l'autre en échec ne l'évite pas)
+      if(!mine&&((e.hunt&&e.hunt.q===q)||(q.hunt&&q.hunt.q===e))) continue;
       const R0=mine?5.5:((e.eng||q.eng)?2.85:3.3); if(dd>=R0) continue;
       const k=(R0-dd)/R0*(mine?15:8), ux=ddx/dd*k, uy=ddy/dd*k;
       e.sepx+=ux; e.sepy+=uy; q.sepx-=ux; q.sepy-=uy;
@@ -1537,7 +1598,8 @@ function* simGen(G,R,Rh,L){
     // garder ses distances (calculé une fois par paire, voir separation())
     dvx+=e.sepx; dvy+=e.sepy;
     const ik=it?it.k:"", agile=ik==="press"||ik==="chase"||ik==="hunt"||ik==="mark"||(it&&it.safe);
-    if(e.tga<0&&ik!=="recv"&&v>4&&e.stun<=t){
+    // (sauf tout près de celui qu'il va mettre en échec : il fonce droit sur lui, sans tourner autour)
+    if(e.tga<0&&ik!=="recv"&&v>4&&e.stun<=t&&!(ik==="hunt"&&dist<9)){
       // Patinage en courbe : la direction tourne (accélération latérale limitée) et la vitesse change à part,
       // l'une et l'autre progressivement (pas d'à-coup). Cible derrière lui : il ralentit un peu et tourne en
       // arc, au lieu de s'arrêter net pour repartir.
@@ -2018,12 +2080,12 @@ function* simGen(G,R,Rh,L){
     if(dd<=reach1||dd<0.5) return {x:spot.x,y:spot.y};
     return inRink(e.x+dx/dd*reach1,e.y+dy/dd*reach1,3);
   }
-  function fire(a,sh,net,kind){
+  function fire(a,sh,net,kind,keep){
     const s=a.side, d=dirS[s];
     const t1=sh.t, dist=Math.round(hyp(d*RK.GOAL-puck.x,puck.y));
     const need=Math.max(0.06,hyp(net.x-puck.x,net.y-puck.y)/118);
     if(t+need-t1>0.05) late.push({t:sh.t,side:s,by:+(t+need-t1).toFixed(2)});
-    const kd=dist<=11&&kind!=="tip"&&kind!=="wrap"?(R()<0.5?"tip":"wrap"):kind;
+    const kd=!keep&&dist<=11&&kind!=="tip"&&kind!=="wrap"?(R()<0.5?"tip":"wrap"):kind;
     puck.st="shot";puck.car=null;puck.sx=puck.x;puck.sy=puck.y;puck.t0=t;puck.tArr=Math.max(t1,t+need);puck.tx=net.x;puck.ty=net.y;puck.shot=sh;puck.last=s;puck.lastE=a;puck.rel=null;
     openItem({k:"shot",side:s,p:a.p,goal:!!sh.goal,kind:kd});
     sh.x=+puck.x.toFixed(1); sh.y=+puck.y.toFixed(1); sh.dist=dist; sh.kind=kd; if(sh.goal) sh.goal.shot=sh;
@@ -2227,6 +2289,7 @@ function* simGen(G,R,Rh,L){
           if(!e.brk&&breakawayOf(e)&&canBreak(e)) startBreak(e);
           if(e.brk){breakTick(e);continue}
           if(e.cmd) e.it=e.cmd;
+          else if(tagUp(e)) continue;
           else if(t>=e.thinkAt||(e.it&&e.it.k==="carry"&&t>=e.it.until)) carrierThink(e);
           continue;
         }

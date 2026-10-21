@@ -63,7 +63,8 @@ const all = games.map(measure);
 // Échappée (comme le moteur la voit) : porteur entre la ligne rouge et la ligne des buts, pas au fond du coin, chaque
 // patineur adverse à 8 pi derrière lui dans la course au filet, gardien devant son filet, pendant au moins une seconde.
 // Ce qui suit : son tir (au but, à côté ou sur le poteau), une passe exigée par la feuille de match (séquence d'un tir
-// prévu, ou passe qui prépare un but de la feuille), une autre passe, un coup de sifflet ou la rondelle perdue.
+// prévu, passe vers le tireur d'un tir prévu, ou passe qui prépare un but de la feuille), une autre passe, un coup de
+// sifflet ou la rondelle perdue.
 function breakEnds(G) {
   const T = G.rec.t, N = T.length, fr = frames(G), c = { tir: 0, feuille: 0, passe: 0, sifflet: 0, perdue: 0 };
   const alone = (F, side, me, d) => { const dn = Math.hypot(d * 89 - me.x, me.y); return !F.some(o => !o.g && o.side !== side && Math.hypot(d * 89 - o.x, o.y) < dn + 8) };
@@ -83,8 +84,9 @@ function breakEnds(G) {
         if (x.t0 > T[k] + 6) break;
         if (x.k === "carry" && x.p === who.p) continue;
         if ((x.k === "shot" && x.p === who.p) || (x.k === "loose" && x.from === who.p && (x.kind === "miss" || x.kind === "block"))) r = "tir";
-        // passe d'une séquence prévue, ou qui prépare un but de la feuille dans les secondes qui suivent
-        else if (x.k === "pass" && x.from === who.p) r = x.seq || G.goals.some(g => g.side === who.side && g.t >= x.t0 && g.t - x.t0 < 12) ? "feuille" : "passe";
+        // passe d'une séquence prévue, passe sûre vers le tireur d'un tir prévu (équipe protégée), ou passe qui prépare
+        // un but de la feuille dans les secondes qui suivent
+        else if (x.k === "pass" && x.from === who.p) r = x.seq || x.prot || G.goals.some(g => g.side === who.side && g.t >= x.t0 && g.t - x.t0 < 12) ? "feuille" : "passe";
         else if (x.k === "dead") r = "sifflet";
         break;
       }
@@ -164,8 +166,10 @@ test("échappée : le porteur fonce au filet et tire toujours (au but, à côté
   const n = ["tir", "feuille", "passe", "sifflet", "perdue"].reduce((a, k) => a + tot(ends, k), 0);
   assert.ok(n >= 7, `${n} échappées seulement : la mesure ne voit plus les échappées`);
   assert.strictEqual(tot(ends, "passe"), 0, `${tot(ends, "passe")} échappées terminées par une passe que la feuille de match n'exigeait pas`);
-  // le reste : passes décisives d'un but prévu, coup de sifflet, ou l'adversaire qui doit tirer bientôt reprend la rondelle
-  assert.ok(tot(ends, "tir") >= 0.85 * n, `${tot(ends, "tir")} tirs sur ${n} échappées`);
+  // le reste vient de la feuille : passe au tireur d'un tir prévu ou au marqueur d'un but prévu (passe décisive), ou
+  // l'adversaire qui doit tirer bientôt à l'autre bout reprend la rondelle (rarement, un coup de sifflet)
+  assert.ok(tot(ends, "tir") >= 0.75 * n, `${tot(ends, "tir")} tirs sur ${n} échappées`);
+  assert.ok(tot(ends, "tir") + tot(ends, "feuille") >= 0.85 * n, `${tot(ends, "tir") + tot(ends, "feuille")} tirs ou passes exigées par la feuille sur ${n} échappées`);
 });
 
 test("patinage fluide : presque jamais figé, rarement arrêté net pour repartir", () => {
