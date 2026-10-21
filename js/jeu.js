@@ -192,7 +192,8 @@ function scheduleShots(G,R){
         return a0+R()*Math.max(0,b0-a0);
       };
       // écarts minimaux : même équipe, autre équipe, après un but, autour d'une pénalité
-      const levels=[[2.6,7,8,3],[2,5.5,7,2.5],[1.5,4,5,1.8],[1,2.5,3,1]];
+      // (entre deux tirs des deux équipes, de quoi sortir de sa zone et y entrer, si les présences le permettent)
+      const levels=[[2.6,11,8,3],[2.3,8.5,7.5,2.8],[2,5.5,7,2.5],[1.5,4,5,1.8],[1,2.5,3,1]];
       let placed=null;
       for(const [gs,go,ga,gp] of levels){
         for(let k=0;k<70&&placed===null;k++){
@@ -1910,11 +1911,13 @@ function* simGen(G,R,Rh,L){
     if(puck.st==="car"&&puck.car.side!==s&&(sh.t-t<leadNeeded(sh)-0.8||sh.t-t<3+(sh.goal?sh.goal.assists.length*0.7:0))){
       const c=puck.car, q=nearestOf(SK[s],c.x,c.y).q;
       if(q&&hyp(q.x-c.x,q.y-c.y)<4) gain(q,"steal");
-      else if(q){
-        // passe ratée ou rondelle harponnée : elle glisse vers un joueur de l'autre équipe, qui la reprend
+      else if(q&&(hyp(q.x-c.x,q.y-c.y)<20||sh.t-t<2.2)){
+        // passe ratée ou rondelle harponnée : elle glisse vers un joueur de l'autre équipe, tout près, qui la reprend
         const dx=q.x+q.vx*0.5-c.x, dy=q.y+q.vy*0.5-c.y, n=hyp(dx,dy)||1, v=clamp((n*1.15+8)/1.6,12,36);
         loosePuck(dx/n*v+(R()-0.5)*3,dy/n*v+(R()-0.5)*3,"poke"); puck.yieldT=t+0.9;
       }
+      // personne de l'autre équipe tout près et un peu de temps : la rondelle lui échappe devant lui (elle ne file pas seule vers un adversaire loin)
+      else if(q) loosePuck(c.vx*0.6+(R()-0.5)*6,c.vy*0.6+(R()-0.5)*6,"bobble");
       else loosePuck(c.vx*0.5+(R()-0.5)*8,c.vy*0.5+(R()-0.5)*8,"poke");
     }
     if(puck.st==="free"&&!puck.blocker&&sh.t-t<leadNeeded(sh)-0.5&&t>=(sh._bounceAt||0)){
@@ -1922,7 +1925,9 @@ function* simGen(G,R,Rh,L){
       if(q){
         const dx=q.x+q.vx*0.4-puck.x, dy=q.y+q.vy*0.4-puck.y, n=hyp(dx,dy)||1, sp=hyp(puck.vx,puck.vy);
         const toward=sp>1&&(dx*puck.vx+dy*puck.vy)/(n*sp)>0.7;
-        if(n>9&&!toward){const v=clamp((n*1.15+8)/1.6,14,42);puck.vx=dx/n*v;puck.vy=dy/n*v;puck.yieldT=t+0.9;sh._bounceAt=t+1.6;stat.bounce=(stat.bounce||0)+1}
+        // rebond vers lui : sur la bande (ricochet), ou n'importe où si le tir doit partir très bientôt
+        const carom=boardDist(puck.x,puck.y)<3.5||sh.t-t<3.2;
+        if(n>9&&!toward&&carom){const v=clamp((n*1.15+8)/1.6,14,42);puck.vx=dx/n*v;puck.vy=dy/n*v;puck.yieldT=t+0.9;sh._bounceAt=t+1.6;stat.bounce=(stat.bounce||0)+1}
       }
     }
     const cpu=U(s,puck.x);

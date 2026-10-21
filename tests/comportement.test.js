@@ -58,8 +58,11 @@ function measure(G) {
   return m;
 }
 const all = games.map(measure);
+// tirs au but : distance au filet (pieds)
+const shots = games.flatMap(G => G.shots);
+const far = shots.filter(s => s.dist > 80).length, farGoals = shots.filter(s => s.goal && s.dist > 60).length;
 const sum = k => all.reduce((a, m) => a + m[k], 0);
-if (process.env.SHOW) console.log(JSON.stringify({ breakPass: sum("breakPass"), breakaways: sum("breakaways"), mates: sum("mates"), opps: sum("opps"), onGoalie: Math.round(sum("onGoalie")) }));
+if (process.env.SHOW) console.log(JSON.stringify({ breakPass: sum("breakPass"), breakaways: sum("breakaways"), mates: sum("mates"), opps: sum("opps"), onGoalie: Math.round(sum("onGoalie")), shots: shots.length, far, farGoals }));
 
 test("échappées rares, et jamais terminées par une passe vers l'arrière", () => {
   assert.ok(sum("breakaways") / games.length <= 12, `${(sum("breakaways") / games.length).toFixed(1)} échappées par match`);
@@ -73,4 +76,9 @@ test("les joueurs ne restent pas collés les uns aux autres", () => {
 
 test("aucun patineur ne s'installe sur un gardien", () => {
   assert.ok(sum("onGoalie") / games.length <= 45, `${(sum("onGoalie") / games.length).toFixed(0)} s par match à moins de 2,5 pi d'un gardien`);
+});
+
+test("pas de tir au but de sa propre zone ni de but de loin sans raison", () => {
+  assert.ok(far / shots.length <= 0.015, `${far} tirs au but de plus de 80 pi sur ${shots.length}`);
+  assert.ok(farGoals <= 1, `${farGoals} buts de plus de 60 pi`);
 });
