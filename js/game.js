@@ -1,5 +1,15 @@
 "use strict";
 
+/* ---------- Cote SP (vitesse) d'un joueur d'après le relevé de la ligue (data/vitesses.js, facultatif) ----------
+   Le joueur est cherché dans son équipe, sinon dans toute la ligue (échange depuis le relevé) quand son nom est unique. */
+const spLigue=(()=>{
+  const V=typeof VITESSES!=="undefined"&&VITESSES&&VITESSES.equipes?VITESSES.equipes:null;
+  if(!V) return ()=>null;
+  const ligue=new Map();
+  Object.values(V).forEach(t=>Object.entries(t).forEach(([k,v])=>ligue.set(k,ligue.has(k)&&ligue.get(k)!==v?null:v)));
+  return (team,name)=>{const k=norm(name),t=V[team];if(t&&t[k]>0)return t[k];const v=ligue.get(k);return v>0?v:null};
+})();
+
 /* ---------- Construction du match ---------- */
 function buildGame(S,L,seedText,opts){
   const rng=mulberry32(hashStr(seedText||"x"));
@@ -13,8 +23,9 @@ function buildGame(S,L,seedText,opts){
     G.team[side]=teamInfo(S[side]);
     G.roster[side]=S.players[side].map(p=>{
       const k=norm(p.name), r=info(side,p.name);
+      // vitesse (cote SP) : page des alignements du match, sinon le relevé de la ligue (data/vitesses.js)
       return {...p,id:"p"+(pid++),side,last:lastName(p.name),pos:L.pos[k]||(r&&r.pos!=="G"?r.pos:null),
-        num:r?r.num:null,sp:r?r.sp:null,st:r?r.st:null,pc:r?r.pc:null,ex:r?r.ex:null};
+        num:r?r.num:null,sp:r&&r.sp!=null?r.sp:spLigue(S[side],p.name),st:r?r.st:null,pc:r?r.pc:null,ex:r?r.ex:null};
     });
   });
   const other=s=>s==="home"?"away":"home";

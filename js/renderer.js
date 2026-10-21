@@ -3,6 +3,9 @@
 /* ---------- Rendu de la patinoire (canvas) ---------- */
 const PBX={away:{x:20,y:50},home:{x:-20,y:50}};
 const WORLD={w:210,h:112};
+// Taille d'un joueur vu d'en haut, en pieds (rayon de la pastille) : environ la largeur des épaules
+// avec l'équipement, un peu grossie pour garder le numéro lisible. La rondelle est grossie bien davantage.
+const PLAYER_R=2.1, PUCK_R=0.7;
 
 function dotColor(G,side){
   const tm=G.team[side];
@@ -56,13 +59,13 @@ function createRenderer(canvas){
     // mises en échec
     (view.hitFx||[]).forEach(f=>{
       const k=(f.until-now)/700, pos=view.posMap.get(f.h.p.id); if(k<=0||!pos) return;
-      const px=X(pos.x),py=Y(pos.y),r0=Math.max(10,3.8*scale)*(1.9-k);
+      const px=X(pos.x),py=Y(pos.y),r0=Math.max(8,(PLAYER_R+1.1)*scale)*(1.9-k);
       c.save();c.globalAlpha=k;c.strokeStyle="#FFB020";c.lineWidth=3;
       for(let i=0;i<8;i++){const a=i*Math.PI/4+0.3;c.beginPath();c.moveTo(px+Math.cos(a)*r0*0.75,py+Math.sin(a)*r0*0.75);c.lineTo(px+Math.cos(a)*r0*1.25,py+Math.sin(a)*r0*1.25);c.stroke()}
       c.restore();
     });
     // rondelle
-    const pk=view.puck||current.puck; const pr=Math.max(3,0.95*scale);
+    const pk=view.puck||current.puck; const pr=Math.max(2.6,PUCK_R*scale);
     c.beginPath();c.arc(X(pk.x),Y(pk.y),pr+1.2,0,Math.PI*2);c.fillStyle="#FFFFFF";c.fill();
     c.beginPath();c.arc(X(pk.x),Y(pk.y),pr,0,Math.PI*2);c.fillStyle="#0A0A0A";c.fill();
   }
@@ -117,15 +120,15 @@ function createRenderer(canvas){
     rinkPath(c); c.lineWidth=Math.max(2,1.1*scale); c.strokeStyle="#7E8C99"; c.stroke();
   }
   function drawPlayer(c,x,y,o,showNames,boxed,alpha){
-    const side=o.side, tm=G.team[side], r=Math.max(6.5,2.7*scale);
+    const side=o.side, tm=G.team[side], r=Math.max(5.5,PLAYER_R*scale);
     const home=side==="home";
     const fill=home?tm.c1:"#FFFFFF";
     const stroke=home?(luminance(tm.c1)<0.03&&tm.c2!=="#FFFFFF"?tm.c2:"#FFFFFF"):dotColor(G,"away");
     const txt=home?(luminance(tm.c1)>0.45?"#111":"#FFF"):dotColor(G,"away");
     const px=X(x),py=Y(y);
     c.globalAlpha=(boxed?0.8:1)*(alpha===undefined?1:alpha);
-    if(o.carrier){c.beginPath();c.arc(px,py,r+3,0,Math.PI*2);c.fillStyle="rgba(255,196,60,.55)";c.fill()}
-    if(o.offside){c.beginPath();c.arc(px,py,r+3.5,0,Math.PI*2);c.strokeStyle="#2B5FB3";c.lineWidth=2.5;c.stroke()}
+    if(o.carrier){c.beginPath();c.arc(px,py,r+2.5,0,Math.PI*2);c.fillStyle="rgba(255,196,60,.55)";c.fill()}
+    if(o.offside){c.beginPath();c.arc(px,py,r+3,0,Math.PI*2);c.strokeStyle="#2B5FB3";c.lineWidth=2.5;c.stroke()}
     c.beginPath();c.arc(px,py,r,0,Math.PI*2);c.fillStyle=fill;c.fill();
     c.lineWidth=home?1.5:2.4;c.strokeStyle=stroke;c.stroke();
     if(home){c.lineWidth=1;c.strokeStyle="rgba(0,0,0,.35)";c.beginPath();c.arc(px,py,r+1.2,0,Math.PI*2);c.stroke()}
@@ -135,9 +138,9 @@ function createRenderer(canvas){
     c.fillStyle=txt;c.font=`700 ${Math.max(7,r*(lab.length>2?0.78:0.92))}px "Barlow Condensed", Barlow, sans-serif`;c.textAlign="center";c.textBaseline="middle";
     c.fillText(lab,px,py+0.5);
     if(showNames){
-      const name=o.p.last; c.font=`600 ${Math.max(9,2.5*scale)}px Barlow, sans-serif`;
+      const name=o.p.last; c.font=`600 ${Math.max(9,2.15*scale)}px Barlow, sans-serif`;
       // noms des joueurs locaux au-dessus, des visiteurs en dessous : lisibles quand ils se font face
-      const ny=boxed||home?py-r-7:py+r+7;
+      const ny=boxed||home?py-r-6:py+r+6;
       const onIce=!boxed;
       c.lineWidth=3;c.strokeStyle=onIce?"rgba(244,248,251,.9)":"transparent";if(onIce)c.strokeText(name,px,ny);
       c.fillStyle=onIce?"#1B2733":inkColor;c.fillText(name,px,ny);

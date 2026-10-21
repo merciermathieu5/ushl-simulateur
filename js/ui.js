@@ -360,6 +360,8 @@ function initUI(){
   const SHOT_FR={wrist:"lancer du poignet",snap:"lancer sec",slap:"lancer frappé",back:"lancer du revers",tip:"déviation",wrap:"en contournant le filet",one:"lancer sur réception"};
   const ZONE_FR={C:"au centre",N:"en zone neutre",O:"en zone offensive",D:"en zone défensive"};
   const MAJOR=new Set(["goal","pen","end","pull","goalie","final"]);
+  // faits saillants : les événements de la feuille de match, et les échappées
+  const isMajor=e=>MAJOR.has(e.type)||!!e.brk;
   function buildFeed(){
     // ordre à temps égal : l'événement, puis le jeu, puis la mise au jeu qui suit, la fin de match en dernier
     const rank=e=>e.type==="final"?4:e.type==="face"?3:MAJOR.has(e.type)?(e.type==="end"?1:0):2;
@@ -379,14 +381,14 @@ function initUI(){
       case "pull": case "goalie": return `${tag(e.side)}${esc2(softText(e))}`;
       case "end": return `<span class="goal">Fin de la ${perName(e.per,G.nPer)}</span>`;
       case "final":{const s2=scoreAt(G.T+1);return `<span class="goal">Final${G.T>3600?" ("+finalOT()+")":""} : ${esc2(G.team.away.abbr)} ${s2.away}, ${esc2(G.team.home.abbr)} ${s2.home}${s2.away===s2.home?", match nul":""}</span>`}
-      case "shot": return `${tag(e.side)}${kind("Tir")}${who(e.p,e.side)}, ${SHOT_FR[e.kind]||"tir"} de ${e.dist} pi, arrêt de ${esc2(e.g?e.g.last:"")}`;
+      case "shot": return `${tag(e.side)}${kind(e.brk?"Tir en échappée":"Tir")}${who(e.p,e.side)}, ${SHOT_FR[e.kind]||"tir"} de ${e.dist} pi, arrêt de ${esc2(e.g?e.g.last:"")}`;
       case "face": return `${tag(e.side)}${kind("Mise au jeu")}${who(e.p,e.side)} l’emporte contre ${esc2(e.q?e.q.last:"")}, ${ZONE_FR[e.zone]||""}`;
       case "freeze": return `${tag(e.side)}${kind("Arrêt")}${esc2(e.g?e.g.name:"")} immobilise la rondelle`;
       case "icing": return `${tag(e.side)}${kind("Dégagement refusé")}${esc2(G.team[e.side].name)}`;
       case "offside": return `${tag(e.side)}${kind("Hors-jeu")}${e.p?who(e.p,e.side):esc2(G.team[e.side].name)}`;
       case "out": return `${tag(e.side)}${kind("Arrêt")}rondelle hors de la patinoire`;
       case "hit": return `${tag(e.side)}${kind("Mise en échec")}${who(e.p,e.side)} sur ${esc2(e.q?e.q.last:"un adversaire")}`;
-      case "miss": return `${tag(e.side)}${kind("Tir raté")}${who(e.p,e.side)}, à côté du filet`;
+      case "miss": return `${tag(e.side)}${kind(e.brk?"Échappée":"Tir raté")}${who(e.p,e.side)}, ${e.post?"tir sur le poteau":e.brk?"tir à côté du filet":"à côté du filet"}`;
       case "block": return `${tag(e.side)}${kind("Tir bloqué")}${who(e.p,e.side)} bloque le tir de ${esc2(e.q?e.q.last:"")}`;
       case "takeaway": return `${tag(e.side)}${kind("Récupération")}${who(e.p,e.side)}`;
       case "giveaway": return `${tag(e.side)}${kind("Revirement")}${who(e.p,e.side)} perd la rondelle`;
@@ -400,7 +402,7 @@ function initUI(){
     let lo=0,hi=feedAll.length;
     while(lo<hi){const m=(lo+hi)>>1;if(feedAll[m].t<=g+0.0001)lo=m+1;else hi=m}
     let shown=feedAll.slice(0,lo).filter(e=>!(e.type==="final"&&g<G.T-0.01));
-    if(feedMode!=="tout") shown=shown.filter(e=>MAJOR.has(e.type));
+    if(feedMode!=="tout") shown=shown.filter(isMajor);
     const key=feedMode+"|"+shown.length+"|"+(shown.length?shown[shown.length-1].t:0);
     if(key===lastFeedKey) return; lastFeedKey=key;
     const f=$("feed");
@@ -409,7 +411,7 @@ function initUI(){
       const src=e.g&&e.type==="goal"?e.g:e.p&&e.type==="pen"?e.p:e;
       const per=src.per||Math.min(Math.floor(e.t/1200)+1,G.nPer), sec=src.sec!==undefined?src.sec:e.t-(per-1)*1200;
       const when=e.type==="final"?"":(perShort(per,G.nPer)+" "+(e.type==="end"?"":fmt(sec)));
-      const cls=MAJOR.has(e.type)?"major":"play";
+      const cls=isMajor(e)?"major":"play";
       return `<li data-t="${e.t}" class="${cls}" tabindex="0" role="button"><span class="ft">${when}</span><span>${feedBody(e)}</span></li>`;
     }).join("");
     f.querySelectorAll("li[data-t]").forEach(li=>{
