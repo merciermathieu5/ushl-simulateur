@@ -2,15 +2,15 @@
 window.USHL_AUTO={
  "v": 1,
  "saison": "USHL22",
- "maj": "2026-11-05T07:55:05.035Z",
+ "maj": "2026-11-07T06:30:24.231Z",
  "saisons": {
   "USHL22": {
    "base": "https://ushl.ca/ushl/menu_sim/USHL-pro/",
    "calendriers": {
     "USHL22Schedule.html": {
-     "lm": "Thu, 05 Nov 2026 02:57:57 GMT",
-     "joues": 156,
-     "restants": 1188
+     "lm": "Sat, 07 Nov 2026 02:56:26 GMT",
+     "joues": 178,
+     "restants": 1166
     }
    },
    "attente": {},
@@ -170,7 +170,29 @@ window.USHL_AUTO={
     {"id":"USHL22-153","t":"saison","r":0,"j":16,"no":153,"v":"NEWJERSEY","l":"SANJOSE","pv":4,"pl":7,"x":"","d":"jeudi, nov 5 2026","tr":"exact","c":"2026-11-05T07:55:05.035Z","src":"data/auto/USHL22/USHL22-153.js"},
     {"id":"USHL22-154","t":"saison","r":0,"j":16,"no":154,"v":"NYRANGERS","l":"ANAHEIM","pv":3,"pl":6,"x":"","d":"jeudi, nov 5 2026","tr":"exact","c":"2026-11-05T07:55:05.035Z","src":"data/auto/USHL22/USHL22-154.js"},
     {"id":"USHL22-155","t":"saison","r":0,"j":16,"no":155,"v":"PITTSBURGH","l":"DALLAS","pv":1,"pl":4,"x":"","d":"jeudi, nov 5 2026","tr":"exact","c":"2026-11-05T07:55:05.035Z","src":"data/auto/USHL22/USHL22-155.js"},
-    {"id":"USHL22-156","t":"saison","r":0,"j":16,"no":156,"v":"BOSTON","l":"UTAH","pv":4,"pl":3,"x":"","d":"jeudi, nov 5 2026","tr":"exact","c":"2026-11-05T07:55:05.035Z","src":"data/auto/USHL22/USHL22-156.js"}
+    {"id":"USHL22-156","t":"saison","r":0,"j":16,"no":156,"v":"BOSTON","l":"UTAH","pv":4,"pl":3,"x":"","d":"jeudi, nov 5 2026","tr":"exact","c":"2026-11-05T07:55:05.035Z","src":"data/auto/USHL22/USHL22-156.js"},
+    {"id":"USHL22-157","t":"saison","r":0,"j":17,"no":157,"v":"BUFFALO","l":"PHILLY","pv":1,"pl":3,"x":"","d":null,"tr":"approx","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-157.js"},
+    {"id":"USHL22-158","t":"saison","r":0,"j":17,"no":158,"v":"CAROLINA","l":"WINNIPEG","pv":2,"pl":4,"x":"","d":null,"tr":"approx","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-158.js"},
+    {"id":"USHL22-159","t":"saison","r":0,"j":17,"no":159,"v":"WASHINGTON","l":"VEGAS","pv":3,"pl":2,"x":"","d":null,"tr":"approx","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-159.js"},
+    {"id":"USHL22-160","t":"saison","r":0,"j":17,"no":160,"v":"DETROIT","l":"SEATTLE","pv":3,"pl":5,"x":"","d":null,"tr":"approx","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-160.js"},
+    {"id":"USHL22-161","t":"saison","r":0,"j":17,"no":161,"v":"PITTSBURGH","l":"NEWJERSEY","pv":5,"pl":3,"x":"","d":null,"tr":"approx","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-161.js"},
+    {"id":"USHL22-162","t":"saison","r":0,"j":17,"no":162,"v":"ISLANDERS","l":"NYRANGERS","pv":1,"pl":3,"x":"","d":null,"tr":"approx","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-162.js"},
+    {"id":"USHL22-163","t":"saison","r":0,"j":18,"no":163,"v":"OTTAWA","l":"ISLANDERS","pv":2,"pl":4,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-163.js"},
+    {"id":"USHL22-164","t":"saison","r":0,"j":18,"no":164,"v":"MONTREAL","l":"PITTSBURGH","pv":4,"pl":1,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-164.js"},
+    {"id":"USHL22-165","t":"saison","r":0,"j":18,"no":165,"v":"BUFFALO","l":"BOSTON","pv":3,"pl":4,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-165.js"},
+    {"id":"USHL22-166","t":"saison","r":0,"j":18,"no":166,"v":"FLORIDE","l":"TORONTO","pv":5,"pl":4,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-166.js"},
+    {"id":"USHL22-167","t":"saison","r":0,"j":18,"no":167,"v":"CAROLINA","l":"TAMPABAY","pv":3,"pl":6,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-167.js"},
+    {"id":"USHL22-168","t":"saison","r":0,"j":18,"no":168,"v":"ST.LOUIS","l":"WASHINGTON","pv":4,"pl":1,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-168.js"},
+    {"id":"USHL22-169","t":"saison","r":0,"j":18,"no":169,"v":"CHICAGO","l":"DETROIT","pv":2,"pl":5,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-169.js"},
+    {"id":"USHL22-170","t":"saison","r":0,"j":18,"no":170,"v":"COLORADO","l":"NASHVILLE","pv":6,"pl":4,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-170.js"},
+    {"id":"USHL22-171","t":"saison","r":0,"j":18,"no":171,"v":"VANCOUVER","l":"COLUMBUS","pv":4,"pl":3,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-171.js"},
+    {"id":"USHL22-172","t":"saison","r":0,"j":18,"no":172,"v":"EDMONTON","l":"CALGARY","pv":5,"pl":2,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-172.js"},
+    {"id":"USHL22-173","t":"saison","r":0,"j":18,"no":173,"v":"ANAHEIM","l":"MINNESOTA","pv":2,"pl":3,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-173.js"},
+    {"id":"USHL22-174","t":"saison","r":0,"j":18,"no":174,"v":"DALLAS","l":"LOSANGELES","pv":5,"pl":4,"x":"OT","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-174.js"},
+    {"id":"USHL22-175","t":"saison","r":0,"j":18,"no":175,"v":"UTAH","l":"SANJOSE","pv":7,"pl":2,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-175.js"},
+    {"id":"USHL22-176","t":"saison","r":0,"j":18,"no":176,"v":"SEATTLE","l":"PHILLY","pv":7,"pl":4,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-176.js"},
+    {"id":"USHL22-177","t":"saison","r":0,"j":18,"no":177,"v":"NEWJERSEY","l":"WINNIPEG","pv":3,"pl":4,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-177.js"},
+    {"id":"USHL22-178","t":"saison","r":0,"j":18,"no":178,"v":"NYRANGERS","l":"VEGAS","pv":5,"pl":3,"x":"","d":"samedi, nov 7 2026","tr":"exact","c":"2026-11-07T06:30:24.231Z","src":"data/auto/USHL22/USHL22-178.js"}
    ]
   }
  }
